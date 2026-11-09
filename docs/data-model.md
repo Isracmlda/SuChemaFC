@@ -1,4 +1,4 @@
-﻿# Modelo de datos de SuChemaFC (Firestore)
+# Modelo de datos de SuChemaFC (Firestore)
 
 Fuente de verdad del esquema. Las reglas están en [`firestore.rules`](../firestore.rules) y se prueban con el emulador (`npm run test:rules`).
 
@@ -23,6 +23,7 @@ Fuente de verdad del esquema. Las reglas están en [`firestore.rules`](../firest
 | `coupons/{code}`                                                                              | `get` con sesión (sin `list`); admin todo                          | admin; cualquier sesión solo puede registrar un uso (ver reglas)               |
 | `orders/{id}`                                                                                 | dueño o admin                                                      | crea cualquier sesión (incluida anónima); solo admin actualiza                 |
 | `orderPrivate/{id}`                                                                           | admin                                                              | admin                                                                          |
+| `printJobs/{id}`                                                                              | `get` público por ID (PuraPrint); `list` solo admin                | crea y borra solo admin; sin `update`                                          |
 | `orderTracking/{code}`                                                                        | `get` público por código; `list` solo admin                        | crea el dueño del pedido junto con el pedido; actualiza admin                  |
 | `supplierOrders/{id}`                                                                         | admin                                                              | admin                                                                          |
 | `reviews/{productId_uid}`                                                                     | pública si `approved == true`; dueño y admin                       | crea sesión de Google (`approved == false`); modera admin; borra dueño o admin |
@@ -146,11 +147,15 @@ El ID es aleatorio y largo (generado por el cliente con `doc(collection(...))`).
 | `deleted`                                   | bool                       | inicial `false`                                                                                                                                                                                                                                            |
 | `createdAt`                                 | timestamp                  |                                                                                                                                                                                                                                                            |
 
-Estados: `pago_pendiente_revision`, `adelanto_confirmado`, `pedido_al_proveedor`, `en_camino`, `listo_para_entrega`, `entregado`, `cancelado`, `pago_rechazado`. La entrega (`/admin/entrega`) lee el QR del recibo `SCFC:<orderId>:<lineIndex>` y cierra el pedido en `entregado` con un solo lote (orden, pago, `paymentRefs` si SINPE, rastreo y bitácora).
+Estados: `pago_pendiente_revision`, `adelanto_confirmado`, `pedido_al_proveedor`, `en_camino`, `listo_para_entrega`, `entregado`, `cancelado`, `pago_rechazado`. La entrega (`/admin/entrega`) lee el QR del recibo `SCFC:<orderId>` (un QR para todo el pedido; el formato viejo `SCFC:<orderId>:<n>` se sigue leyendo) y cierra el pedido en `entregado` con un solo lote (orden, pago, `paymentRefs` si SINPE, rastreo y bitácora).
 
 ### `orderPrivate/{id}`
 
 Datos internos del pedido (notas internas del admin). Mismo `id` que `orders`. Va aparte porque las reglas aplican a todo el documento y el cliente lee su pedido.
+
+### `printJobs/{id}`
+
+Recibo en imagen que el admin deja para imprimirlo con PuraPrint cuando la app corre como PWA instalada (donde no hay `postMessage` entre ventanas). PuraPrint lo lee por su ID, que no es adivinable (`?job=<id>&src=suchema`). Campos: `image` (`data:image/png;base64,…`, máx. 400 000 caracteres), `title` (máx. 100), `orderId`, `createdAt` (= hora del servidor). Se borran al eliminar el pedido.
 
 ### `orderTracking/{code}`
 
@@ -167,7 +172,11 @@ Vista pública mínima, sin datos personales.
 
 ### `supplierOrders/{id}`
 
-`supplier`, `notes`, `status` (`pedido`, `en_produccion`, `enviado`, `llego`), `lineRefs` (`[{orderId, lineIndex}]`), `items` (copia de cada línea con `orderRef`, `name`, `size`, `patches`, `custom`, `qty`, `unitCost`), `totalCost`, `estimatedDate` (timestamp o `null`), `updates` (`[{status, at, note}]`), `createdAt`. Solo admin. Cambiar el estado actualiza en el mismo lote `orders.status` y `orderTracking` (estado, historial y `estimatedDate`) de los clientes afectados.
+`supplier`, `notes`, `status` (`pedido`, `en_produccion`, `enviado`, `llego`), `lineRefs` (`[{orderId, lineIndex}]`), `items` (copia de cada línea con `orderRef`, `name`, `size`, `patches`, `custom`, `qty`, `unitCost`, `unitPrice` precio de venta de la línea), `totalCost` (solo camisas), `importCost` (costos de importación del pedido; se reparten en partes iguales entre las camisas), `estimatedDate` (timestamp o `null`), `updates` (`[{status, at, note}]`), `createdAt`. Solo admin. Cambiar el estado actualiza en el mismo lote `orders.status` y `orderTracking` (estado, historial y `estimatedDate`) de los clientes afectados.
+
+### `expenses/{id}`
+
+Costos secundarios (insumos como papel de impresora o bolsas): `description` (texto, 1–100), `amount` (entero > 0), `date` (timestamp), `createdAt`. Solo admin; se crean y se eliminan, no se editan. Restan de la ganancia en Admin → Resumen.
 
 ### `reviews/{productId_uid}`
 

@@ -1,13 +1,33 @@
 import { onIdTokenChanged } from 'firebase/auth'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { auth, isFirebaseConfigured } from '../services/firebase.js'
 import { fetchIsAdmin, upsertUserProfile } from '../services/auth.js'
 import { AuthContext } from './authContext.js'
 
 const INITIAL = { user: null, isAdmin: false, loading: isFirebaseConfigured, error: null }
+const CLIENT_VIEW_KEY = 'suchemafc-client-view'
+
+function readClientView() {
+  try {
+    return localStorage.getItem(CLIENT_VIEW_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 export function AuthProvider({ children }) {
   const [state, setState] = useState(INITIAL)
+  // Vista de cliente: un admin ve la tienda sin las herramientas de administración.
+  const [clientView, setClientViewState] = useState(readClientView)
+
+  const setClientView = useCallback((value) => {
+    setClientViewState(value)
+    try {
+      localStorage.setItem(CLIENT_VIEW_KEY, value ? '1' : '0')
+    } catch {
+      // Sin almacenamiento disponible: la preferencia solo dura la sesión.
+    }
+  }, [])
 
   useEffect(() => {
     if (!isFirebaseConfigured) return undefined
@@ -44,12 +64,15 @@ export function AuthProvider({ children }) {
     () => ({
       user: state.user,
       isAdmin: state.isAdmin,
+      clientView,
+      setClientView,
+      showAdminUi: state.isAdmin && !clientView,
       isGuest: Boolean(state.user?.isAnonymous),
       loading: state.loading,
       configured: isFirebaseConfigured,
       error: state.error,
     }),
-    [state],
+    [state, clientView, setClientView],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

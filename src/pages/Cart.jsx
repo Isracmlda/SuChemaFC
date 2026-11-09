@@ -1,17 +1,18 @@
 import { MdDelete } from 'react-icons/md'
 import { Link } from 'react-router-dom'
 import DriveImage from '../components/DriveImage.jsx'
-import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import { EmptyState, ErrorState, Loading, Notice } from '../components/States.jsx'
 import { MAX_QTY, priceCart } from '../features/cart/cart.js'
 import { couponOutcome, evaluateCoupon, normalizeCode } from '../features/pricing/coupon.js'
 import CouponBox from '../features/pricing/CouponBox.jsx'
 import { useAsync } from '../hooks/useAsync.js'
 import { useCart } from '../hooks/useCart.js'
 import { useCoupon } from '../hooks/useCoupon.js'
+import { useDialog } from '../hooks/useDialog.js'
 import { fetchCoupon } from '../services/promotions.js'
 import { loadCatalog } from '../services/storefront.js'
 import { formatCRC } from '../utils/format.js'
-import { btnIcon, btnPrimary, btnSecondary, cardClass } from '../utils/ui.js'
+import { actionRowClass, btnIcon, btnPrimary, btnSecondary, cardClass } from '../utils/ui.js'
 import { describeCustom } from '../features/personalization/personalization.js'
 
 // El catálogo se guarda 5 minutos en memoria: abrir el carrito revalida los precios con esa vigencia.
@@ -127,6 +128,7 @@ export default function Cart() {
     syncing,
     syncError,
   } = useCart()
+  const dialog = useDialog()
   const applied = useCoupon(couponCode)
   const { data: catalog, loading, error, reload } = useAsync(loadFresh)
 
@@ -161,6 +163,15 @@ export default function Cart() {
       return 'No se pudo revisar el cupón. Intenta de nuevo.'
     }
   }
+  async function askClear() {
+    const sure = await dialog.confirm({
+      title: 'Vaciar carrito',
+      message: '¿Vaciar el carrito?',
+      confirmLabel: 'Vaciar',
+      danger: true,
+    })
+    if (sure) clearCart()
+  }
   const acceptPrices = () =>
     acknowledge(
       Object.fromEntries(cart.items.filter((i) => i.changed).map((i) => [i.line.key, i.unit])),
@@ -173,7 +184,7 @@ export default function Cart() {
         <h1 className="text-2xl font-bold">Carrito</h1>
         <button
           type="button"
-          onClick={() => window.confirm('¿Vaciar el carrito?') && clearCart()}
+          onClick={askClear}
           className="text-sm font-semibold text-accent underline"
         >
           Vaciar
@@ -191,12 +202,16 @@ export default function Cart() {
           </button>
         </div>
       )}
-      {syncError && (
-        <p role="alert" className="text-sm text-danger">
-          <span aria-hidden="true">⚠ </span>
-          No se pudo sincronizar con tu cuenta. Tu carrito sigue guardado en este dispositivo.
-        </p>
-      )}
+      <Notice
+        notice={
+          syncError
+            ? {
+                type: 'error',
+                text: 'No se pudo sincronizar con tu cuenta. Tu carrito sigue guardado en este dispositivo.',
+              }
+            : null
+        }
+      />
 
       <ul className="flex flex-col gap-3">
         {cart.items.map((item) => (
@@ -226,7 +241,7 @@ export default function Cart() {
           </p>
         )}
         <p className="text-sm text-muted">El envío se calcula al finalizar la compra.</p>
-        <div className="flex flex-wrap gap-2">
+        <div className={actionRowClass}>
           {canCheckout ? (
             <Link to="/checkout" className={btnPrimary}>
               Finalizar compra

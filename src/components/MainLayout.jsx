@@ -11,7 +11,10 @@ export default function MainLayout() {
     <div className="flex min-h-svh flex-col bg-bg text-fg">
       <Navbar />
       {/* La key reinicia la animación de entrada en cada cambio de ruta */}
-      <main key={pathname} className="page-enter mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+      <main
+        key={pathname}
+        className="page-enter mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-8"
+      >
         <Outlet />
       </main>
       <Footer />

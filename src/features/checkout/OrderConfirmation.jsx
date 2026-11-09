@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { MdContentCopy, MdWhatsapp } from 'react-icons/md'
 import { Link } from 'react-router-dom'
 import {
@@ -8,14 +8,23 @@ import {
   trackingUrl,
   whatsappLink,
 } from './checkout.js'
+import { useDialog } from '../../hooks/useDialog.js'
+import { useToast } from '../../hooks/useToast.js'
 import { formatCRC } from '../../utils/format.js'
 import { saveOrderCode } from '../tracking/savedOrders.js'
 import { trackingLabel } from '../tracking/tracking.js'
-import { btnPrimary, btnSecondary, cardClass } from '../../utils/ui.js'
+import {
+  actionRowClass,
+  actionStackClass,
+  btnPrimary,
+  btnSecondary,
+  cardClass,
+} from '../../utils/ui.js'
 
 /** Pantalla final: código del pedido, enlace de rastreo y botón de WhatsApp con el resumen. */
 export default function OrderConfirmation({ result, whatsappNumber }) {
-  const [copied, setCopied] = useState('')
+  const dialog = useDialog()
+  const toast = useToast()
   const link = trackingUrl(window.location.origin, result.trackingCode)
   const wa = whatsappLink(
     whatsappNumber,
@@ -34,19 +43,12 @@ export default function OrderConfirmation({ result, whatsappNumber }) {
     saveOrderCode(result.trackingCode, trackingLabel(result.lines))
   }, [result.trackingCode, result.lines])
 
-  useEffect(() => {
-    if (!copied) return undefined
-    const id = setTimeout(() => setCopied(''), 2500)
-    return () => clearTimeout(id)
-  }, [copied])
-
   async function copy(text, what) {
     try {
       await navigator.clipboard.writeText(text)
-      setCopied(what)
+      toast.ok(`${what === 'código' ? 'Código' : 'Enlace'} copiado.`)
     } catch {
-      setCopied('')
-      window.prompt('Copia este texto:', text)
+      await dialog.showText({ title: 'Copiar texto', message: 'Copia este texto:', text })
     }
   }
 
@@ -67,7 +69,7 @@ export default function OrderConfirmation({ result, whatsappNumber }) {
         <p className="break-all rounded-md bg-surface-2 p-3 font-mono text-sm">
           {result.trackingCode}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className={actionRowClass}>
           <button
             type="button"
             onClick={() => copy(result.trackingCode, 'código')}
@@ -81,9 +83,6 @@ export default function OrderConfirmation({ result, whatsappNumber }) {
             Copiar enlace
           </button>
         </div>
-        <p role="status" className="min-h-5 text-sm text-success">
-          {copied && `✓ ${copied === 'código' ? 'Código' : 'Enlace'} copiado.`}
-        </p>
         <p className="text-sm text-muted">
           Con este código sigues tu pedido sin necesidad de cuenta. Si lo pierdes, no podremos
           mostrártelo de nuevo.
@@ -103,7 +102,7 @@ export default function OrderConfirmation({ result, whatsappNumber }) {
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className={actionStackClass}>
         {wa && (
           <a href={wa} target="_blank" rel="noopener noreferrer" className={btnPrimary}>
             <MdWhatsapp className="size-5" aria-hidden="true" />

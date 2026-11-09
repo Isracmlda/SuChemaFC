@@ -4,6 +4,7 @@ import DriveImage from '../../../components/DriveImage.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { errorMessage } from '../../../utils/errors.js'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { deletePatchGroup } from '../../../services/catalog.js'
 import { listCollection } from '../../../services/db.js'
 import { formatCRC } from '../../../utils/format.js'
@@ -14,6 +15,7 @@ import PatchGroupEditor from './PatchGroupEditor.jsx'
 const loadGroups = () => listCollection('patchGroups')
 
 export default function PatchGroupsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(loadGroups)
   const [form, setForm] = useState(null) // null = cerrado
   const [notice, setNotice] = useState(null)
@@ -25,7 +27,13 @@ export default function PatchGroupsPage() {
   const groups = [...data].sort((a, b) => a.order - b.order)
 
   async function handleDelete(group) {
-    if (!window.confirm(`¿Eliminar el grupo "${group.name}"?`)) return
+    const sure = await dialog.confirm({
+      title: 'Eliminar grupo',
+      message: `¿Eliminar el grupo "${group.name}"?`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!sure) return
     setBusy(true)
     setNotice(null)
     try {

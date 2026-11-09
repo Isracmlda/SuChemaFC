@@ -1,5 +1,7 @@
 import { formatCRC } from '../../../utils/format.js'
-import { orderRef, trackingUrl, whatsappLink } from '../../checkout/checkout.js'
+import { buildLabelPayload } from '../delivery/delivery.js'
+import { formatAddress, orderRef, trackingUrl, whatsappLink } from '../../checkout/checkout.js'
+import { describeCustom } from '../../personalization/personalization.js'
 
 /** Estados de un pedido a proveedor y el estado que provocan en los pedidos de clientes. */
 export const SUPPLIER_STATUS = {
@@ -54,6 +56,7 @@ export function pendingLines(orders, supplierOrders) {
         patches: (line.patches ?? []).map((p) => p.name),
         custom: line.custom ?? null,
         qty: line.qty,
+        unitPrice: line.unitPrice,
       })
     })
   }
@@ -99,7 +102,10 @@ export function groupLines(lines) {
 }
 
 /** Error del formulario de un pedido a proveedor ('' si es válido). `lines` ya trae `unitCost`. */
-export function validateSupplierForm({ supplier, notes, estimatedDate, lines }, now = Date.now()) {
+export function validateSupplierForm(
+  { supplier, notes, estimatedDate, lines, importCost = 0 },
+  now = Date.now(),
+) {
   if (supplier.trim().length < 2) return 'Escribe el nombre del proveedor.'
   if (supplier.trim().length > 100) return 'El nombre del proveedor es demasiado largo.'
   if (notes.length > 1000) return 'Las notas admiten hasta 1000 caracteres.'
@@ -110,6 +116,9 @@ export function validateSupplierForm({ supplier, notes, estimatedDate, lines }, 
   if (lines.some((l) => !Number.isInteger(l.unitCost) || l.unitCost < 0)) {
     return 'Cada costo unitario debe ser un monto entero (0 o más).'
   }
+  if (!Number.isInteger(importCost) || importCost < 0) {
+    return 'Los costos de importación deben ser un monto entero (0 o más).'
+  }
   if (estimatedDate != null && estimatedDate < now - DAY) {
     return 'La fecha estimada no puede ser pasada.'
   }
@@ -117,7 +126,7 @@ export function validateSupplierForm({ supplier, notes, estimatedDate, lines }, 
 }
 
 /** Documento `supplierOrders` (sin `createdAt`, que agrega el servicio). */
-export function buildSupplierOrder({ supplier, notes, estimatedDate, lines }) {
+export function buildSupplierOrder({ supplier, notes, estimatedDate, lines, importCost = 0 }) {
   const items = lines.map((l) => ({
     orderRef: l.orderRef,
     name: l.name,
@@ -132,6 +141,7 @@ export function buildSupplierOrder({ supplier, notes, estimatedDate, lines }) {
       : null,
     qty: l.qty,
     unitCost: l.unitCost,
+    unitPrice: l.unitPrice ?? 0,
   }))
   return {
     supplier: supplier.trim(),
@@ -140,6 +150,7 @@ export function buildSupplierOrder({ supplier, notes, estimatedDate, lines }) {
     lineRefs: lines.map((l) => ({ orderId: l.orderId, lineIndex: l.lineIndex })),
     items,
     totalCost: items.reduce((sum, i) => sum + i.qty * i.unitCost, 0),
+    importCost,
     estimatedDate: estimatedDate ?? null,
     updates: [],
   }
@@ -259,3 +270,70 @@ export function customerNotices(orders, supplierOrder, { template, origin }) {
 
 export const describeCost = (supplierOrder) =>
   `${supplierOrder.items.reduce((n, i) => n + i.qty, 0)} camisas · ${formatCRC(supplierOrder.totalCost)}`
+
+// ---------- Costos de importación y ganancia ----------
+
+/** Cantidad de camisas (unidades) de un pedido a proveedor. */
+export const unitsOf = (supplierOrder) => supplierOrder.items.reduce((n, i) => n + i.qty, 0)
+
+/** Reparto equitativo de los costos de importación entre todas las camisas. */
+export const importPerUnit = (importCost, units) => (units > 0 ? importCost / units : 0)
+
+/**
+ * Cifras del pedido: costo de camisas, importación (total y por camisa), ingresos de venta de esas
+ * camisas y ganancia. `revenue` y `profit` son null en pedidos antiguos que no guardaron el precio
+ * de venta. El descuento y el envío del pedido del cliente no se consideran.
+ */
+export function supplierSummary(supplierOrder) {
+  const units = unitsOf(supplierOrder)
+  const importCost = supplierOrder.importCost ?? 0
+  const productCost = supplierOrder.totalCost
+  const priced = supplierOrder.items.every((i) => Number.isFinite(i.unitPrice))
+  const revenue = priced ? supplierOrder.items.reduce((n, i) => n + i.qty * i.unitPrice, 0) : null
+  return {
+    units,
+    productCost,
+    importCost,
+    importPerUnit: importPerUnit(importCost, units),
+    totalCost: productCost + importCost,
+    revenue,
+    profit: revenue == null ? null : revenue - productCost - importCost,
+  }
+}
+
+// ---------- Etiquetas de entrega ----------
+
+/**
+ * Una etiqueta por camisa (una por unidad) para pegar en la bolsa. El QR lleva la guía de rastreo
+ * del pedido del cliente: escanearlo en Entrega abre ese pedido. `missing` cuenta las camisas cuyo
+ * pedido de cliente no se encontró (no llevan etiqueta). `address` solo se llena en envíos por
+ * Correos; en entregas coordinadas por WhatsApp queda vacío.
+ */
+export function buildLabels(supplierOrder, orders) {
+  const byId = new Map(orders.map((o) => [o.id, o]))
+  const labels = []
+  let missing = 0
+  supplierOrder.items.forEach((item, i) => {
+    const order = byId.get(supplierOrder.lineRefs?.[i]?.orderId)
+    if (!order?.trackingCode || order.deleted || order.status === 'cancelado') {
+      missing += item.qty
+      return
+    }
+    for (let copy = 1; copy <= item.qty; copy += 1) {
+      labels.push({
+        qrPayload: buildLabelPayload(order.trackingCode, supplierOrder.lineRefs?.[i]?.lineIndex),
+        ref: orderRef(order.id),
+        orderId: order.id,
+        customerName: order.customer?.name ?? '',
+        shirt: item.name,
+        size: item.size,
+        patches: item.patches ?? [],
+        custom: item.custom ? describeCustom(item.custom) : '',
+        address: order.shippingMethod === 'correos' ? formatAddress(order.customer?.address) : '',
+        copy,
+        copies: item.qty,
+      })
+    }
+  })
+  return { labels, missing }
+}

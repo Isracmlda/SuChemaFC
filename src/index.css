@@ -148,6 +148,50 @@ html.theme-transition *::after {
   animation: page-enter 350ms ease-out both;
 }
 
+/* Toast que entra desde la derecha */
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.toast-enter {
+  animation: toast-enter 250ms ease-out both;
+}
+
+/* Tarjetas del catálogo al aparecer o desaparecer por la búsqueda y los filtros */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes card-leave {
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+.card-enter {
+  animation: card-enter 250ms ease-out both;
+}
+
+.card-leave {
+  animation: card-leave 200ms ease-in both;
+  pointer-events: none;
+}
+
 /* Respeta la preferencia del sistema "reducir movimiento" */
 @media (prefers-reduced-motion: reduce) {
   html.theme-transition,
@@ -157,7 +201,10 @@ html.theme-transition *::after {
     transition: none !important;
   }
 
-  .page-enter {
+  .page-enter,
+  .card-enter,
+  .card-leave,
+  .toast-enter {
     animation: none;
   }
 

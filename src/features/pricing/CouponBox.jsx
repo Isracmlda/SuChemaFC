@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MdClose, MdLocalOffer } from 'react-icons/md'
+import { useToast } from '../../hooks/useToast.js'
 import { formatCRC } from '../../utils/format.js'
 import { btnIcon, btnSecondary, inputClass } from '../../utils/ui.js'
 
@@ -9,8 +10,8 @@ import { btnIcon, btnSecondary, inputClass } from '../../utils/ui.js'
  * - `onApply(texto)`: async, devuelve '' si se aplicó o el mensaje de error.
  */
 export default function CouponBox({ code, result, loading, error, onApply, onRemove }) {
+  const toast = useToast()
   const [text, setText] = useState('')
-  const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function submit(event) {
@@ -18,8 +19,8 @@ export default function CouponBox({ code, result, loading, error, onApply, onRem
     if (!text.trim()) return
     setBusy(true)
     const problem = await onApply(text)
-    setMessage(problem)
-    if (!problem) setText('')
+    if (problem) toast.error(problem)
+    else setText('')
     setBusy(false)
   }
 
@@ -35,10 +36,7 @@ export default function CouponBox({ code, result, loading, error, onApply, onRem
             type="button"
             aria-label={`Quitar el cupón ${code}`}
             title="Quitar cupón"
-            onClick={() => {
-              setMessage('')
-              onRemove()
-            }}
+            onClick={onRemove}
             className={btnIcon}
           >
             <MdClose className="size-5" aria-hidden="true" />
@@ -76,12 +74,6 @@ export default function CouponBox({ code, result, loading, error, onApply, onRem
           </button>
         </span>
       </label>
-      {message && (
-        <p role="alert" className="text-sm text-danger">
-          <span aria-hidden="true">⚠ </span>
-          {message}
-        </p>
-      )}
     </form>
   )
 }

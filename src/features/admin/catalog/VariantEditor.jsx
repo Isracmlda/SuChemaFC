@@ -12,6 +12,7 @@ import NumberInput from '../../../components/NumberInput.jsx'
 import { SIZES } from '../../../utils/constants.js'
 import { formatCRC } from '../../../utils/format.js'
 import { btnIcon, cardClass, inputClass } from '../../../utils/ui.js'
+import { chartSizes } from '../../sizeChart/chart.js'
 import ImagesEditor from './ImagesEditor.jsx'
 import SizeSurchargesEditor from './SizeSurchargesEditor.jsx'
 import VisibleSizesEditor from './VisibleSizesEditor.jsx'
@@ -36,16 +37,19 @@ export default function VariantEditor({
 }) {
   const [expanded, setExpanded] = useState(true)
 
-  const effectivePrice =
-    variant.price != null && variant.price !== '' ? Number(variant.price) : baseProduct.price
-  const effectiveCost = variantCost != null && variantCost !== '' ? Number(variantCost) : baseCost
-  const margin =
-    Number.isFinite(effectivePrice) && Number.isFinite(effectiveCost)
-      ? effectivePrice - effectiveCost
-      : null
-
   const baseSizes = baseProduct.sizes?.length ? baseProduct.sizes : SIZES
-  const variantSizes = variant.sizes?.length ? variant.sizes : baseSizes
+  // Guía de la versión: la propia o, si no tiene, la de la camisa base.
+  const baseChart = sizeCharts.find((c) => c.id === baseProduct.sizeChartId) ?? null
+  const chart = sizeCharts.find((c) => c.id === variant.sizeChartId) ?? baseChart
+  const chartAll = chartSizes(chart)
+  const chartPicked = variant.sizes?.filter((s) => chartAll.includes(s)) ?? []
+  const variantSizes = chart
+    ? chartPicked.length > 0
+      ? chartAll.filter((s) => chartPicked.includes(s))
+      : chartAll
+    : variant.sizes?.length
+      ? variant.sizes
+      : baseSizes
 
   const hasCustomImages = Array.isArray(variant.images)
   const hasCustomPatches = Array.isArray(variant.patchGroupIds)
@@ -78,11 +82,6 @@ export default function VariantEditor({
           {!variant.visible && (
             <span className="rounded bg-muted/20 px-2 py-0.5 text-xs text-muted font-normal">
               Oculta
-            </span>
-          )}
-          {margin != null && (
-            <span className="text-xs text-muted">
-              · Margen: <strong className="text-text">{formatCRC(margin)}</strong>
             </span>
           )}
         </div>
@@ -160,11 +159,7 @@ export default function VariantEditor({
               />
             </Field>
             <Field
-              label={
-                <>
-                  Costo de proveedor (₡) <span className="font-normal text-muted">· Privado</span>
-                </>
-              }
+              label="Costo de proveedor (₡)"
               hint={
                 variantCost != null && variantCost !== ''
                   ? `Base: ${formatCRC(baseCost)}`
@@ -178,17 +173,22 @@ export default function VariantEditor({
             </Field>
           </div>
 
-          {/* Tabla de tallas */}
+          {/* Guía de tallas */}
           <Field
-            label="Tabla de tallas"
-            hint="Guía de medidas aplicable a esta versión (ej. tabla de niño, mujer o adulto)."
+            label="Guía de tallas"
+            hint="La guía que verá el cliente al abrir «Guía de tallas» con esta versión. Sus tallas son las que puedes ofrecer."
           >
             <select
               value={variant.sizeChartId ?? ''}
-              onChange={(e) => set({ sizeChartId: e.target.value || undefined })}
+              // Las tallas pertenecen a la guía: al cambiarla se vuelven a elegir.
+              onChange={(e) => set({ sizeChartId: e.target.value || undefined, sizes: undefined })}
               className={inputClass}
             >
-              <option value="">(Usa la tabla estándar/heredada de la tienda)</option>
+              <option value="">
+                {baseChart
+                  ? `(Usa la de la camisa base: ${baseChart.name})`
+                  : '(Sin guía de tallas)'}
+              </option>
               {sizeCharts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -205,6 +205,7 @@ export default function VariantEditor({
               inheritedSizes={baseSizes}
               allowInherit={true}
               label="Tallas visibles para esta versión"
+              chart={chart}
             />
           </div>
 

@@ -38,18 +38,8 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/sitemap\.xml$/, /^\/robots\.txt$/],
         globPatterns: ['**/*.{js,css,html,png,webmanifest}'],
-        // Librerías pesadas que solo usa el admin (recibos PDF y escáner QR): se piden al usarlas.
-        globIgnores: [
-          '**/jspdf*',
-          '**/html2canvas*',
-          '**/jsQR*',
-          '**/purify*',
-          '**/index.es-*',
-          '**/browser-*',
-          '**/receiptPdf*',
-          '**/QrScanner*',
-          '**/DeliveryPage*',
-        ],
+        // Lo que solo usa el admin (escáner QR y entrega): se pide al usarlo.
+        globIgnores: ['**/jsQR*', '**/QrScanner*', '**/DeliveryPage*'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         runtimeCaching: [

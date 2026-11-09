@@ -893,6 +893,50 @@ describe('bitácora y comprobantes', () => {
     await assertSucceeds(setDoc(doc(admin(), 'supplierOrders/s1'), { supplier: 'x' }))
   })
 
+  it('expenses: solo el admin crea y borra, con campos exactos y sin editar', async () => {
+    const expense = {
+      description: 'Bolsas',
+      amount: 3000,
+      date: Timestamp.now(),
+      createdAt: serverTimestamp(),
+    }
+    await assertSucceeds(setDoc(doc(admin(), 'expenses/e1'), expense))
+    await assertFails(setDoc(doc(google('alice'), 'expenses/e2'), expense))
+    await assertFails(setDoc(doc(noAuth(), 'expenses/e3'), expense))
+    await assertFails(setDoc(doc(admin(), 'expenses/e4'), { ...expense, amount: 0 }))
+    await assertFails(setDoc(doc(admin(), 'expenses/e5'), { ...expense, amount: 10.5 }))
+    await assertFails(setDoc(doc(admin(), 'expenses/e6'), { ...expense, description: '' }))
+    await assertFails(setDoc(doc(admin(), 'expenses/e7'), { ...expense, extra: 1 }))
+    await assertFails(setDoc(doc(admin(), 'expenses/e8'), { ...expense, date: 'hoy' }))
+    await assertFails(updateDoc(doc(admin(), 'expenses/e1'), { amount: 1 }))
+    await assertFails(getDoc(doc(google('alice'), 'expenses/e1')))
+    await assertSucceeds(getDocs(collection(admin(), 'expenses')))
+    await assertFails(deleteDoc(doc(google('alice'), 'expenses/e1')))
+    await assertSucceeds(deleteDoc(doc(admin(), 'expenses/e1')))
+  })
+
+  it('printJobs: el admin deja el recibo, PuraPrint lo lee sin sesión por su ID', async () => {
+    const job = {
+      image: 'data:image/png;base64,iVBORw0KGgo=',
+      title: 'Recibo ABC12345',
+      orderId: 'o1',
+      createdAt: serverTimestamp(),
+    }
+    await assertSucceeds(setDoc(doc(admin(), 'printJobs/j1'), job))
+    await assertFails(setDoc(doc(google('alice'), 'printJobs/j2'), job))
+    await assertFails(setDoc(doc(noAuth(), 'printJobs/j3'), job))
+    // Imagen que no es PNG, clave extra o fecha falsa: rechazados incluso para el admin.
+    await assertFails(setDoc(doc(admin(), 'printJobs/j4'), { ...job, image: 'data:text/html,x' }))
+    await assertFails(setDoc(doc(admin(), 'printJobs/j5'), { ...job, extra: 1 }))
+    await assertFails(setDoc(doc(admin(), 'printJobs/j6'), { ...job, createdAt: Timestamp.now() }))
+    await assertSucceeds(getDoc(doc(noAuth(), 'printJobs/j1')))
+    await assertSucceeds(getDocs(collection(admin(), 'printJobs')))
+    await assertFails(getDocs(collection(noAuth(), 'printJobs')))
+    await assertFails(updateDoc(doc(admin(), 'printJobs/j1'), { title: 'otro' }))
+    await assertFails(deleteDoc(doc(google('alice'), 'printJobs/j1')))
+    await assertSucceeds(deleteDoc(doc(admin(), 'printJobs/j1')))
+  })
+
   it('cualquier ruta no definida está denegada', async () => {
     await assertFails(setDoc(doc(admin(), 'otraColeccion/x'), { a: 1 }))
     await assertFails(getDoc(doc(admin(), 'otraColeccion/x')))

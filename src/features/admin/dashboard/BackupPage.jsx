@@ -4,7 +4,7 @@ import { Notice } from '../../../components/States.jsx'
 import { listCollection } from '../../../services/db.js'
 import { listAllOrders, loadCostData } from '../../../services/reports.js'
 import { errorMessage } from '../../../utils/errors.js'
-import { btnSecondary, cardClass } from '../../../utils/ui.js'
+import { actionRowClass, btnSecondary, cardClass } from '../../../utils/ui.js'
 import { backupName, catalogCsv, customersCsv, ordersCsv, toJson } from './exports.js'
 
 function download(text, filename, type) {
@@ -86,7 +86,7 @@ function ExportCard({ item }) {
     <li className={`${cardClass} flex flex-col gap-2`}>
       <h2 className="text-lg font-bold">{item.title}</h2>
       <p className="text-sm text-muted">{item.text}</p>
-      <div className="flex flex-wrap gap-2">
+      <div className={actionRowClass}>
         {['csv', 'json'].map((kind) => (
           <button
             key={kind}

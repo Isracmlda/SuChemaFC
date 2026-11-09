@@ -15,6 +15,7 @@ import { EmptyState, ErrorState, Loading, Notice } from '../../../components/Sta
 import { errorMessage } from '../../../utils/errors.js'
 import Field from '../../../components/Field.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import {
   createSection,
   deleteSection,
@@ -32,7 +33,14 @@ import {
   flattenVisible,
   sectionDepth,
 } from '../../../utils/tree.js'
-import { btnIcon, btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
+import {
+  actionRowClass,
+  btnIcon,
+  btnPrimary,
+  btnSecondary,
+  cardClass,
+  inputClass,
+} from '../../../utils/ui.js'
 import { sectionPath } from '../../catalog/search.js'
 import SectionSelector from './SectionSelector.jsx'
 import { buildImportPlan, MAX_IMPORT_SECTIONS, parseSectionPaste } from './sectionImport.js'
@@ -151,7 +159,7 @@ function BulkImport({ sections, onDone, onClose }) {
       )}
 
       {error && <Notice notice={{ type: 'error', text: error }} />}
-      <div className="flex flex-wrap gap-2">
+      <div className={actionRowClass}>
         <button
           type="button"
           disabled={busy || plan.created.length === 0}
@@ -170,6 +178,7 @@ function BulkImport({ sections, onDone, onClose }) {
 }
 
 export default function SectionsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(loadSections)
   const [name, setName] = useState('')
   const [parentId, setParentId] = useState('')
@@ -256,7 +265,7 @@ export default function SectionsPage() {
             rootLabel="(Sección principal)"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={actionRowClass}>
           <button
             type="submit"
             disabled={busy || !name.trim() || sectionDepth(data, parentId) >= MAX_SECTION_DEPTH}
@@ -429,10 +438,14 @@ export default function SectionsPage() {
                         aria-label={`Eliminar ${s.name}`}
                         title="Eliminar"
                         disabled={busy}
-                        onClick={() => {
-                          if (window.confirm(`¿Eliminar la sección "${s.name}"?`)) {
-                            run(() => deleteSection(s, data), 'Sección eliminada.')
-                          }
+                        onClick={async () => {
+                          const sure = await dialog.confirm({
+                            title: 'Eliminar sección',
+                            message: `¿Eliminar la sección "${s.name}"?`,
+                            confirmLabel: 'Eliminar',
+                            danger: true,
+                          })
+                          if (sure) run(() => deleteSection(s, data), 'Sección eliminada.')
                         }}
                         className={btnIcon}
                       >

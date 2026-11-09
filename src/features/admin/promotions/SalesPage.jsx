@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { MdDelete, MdLocalOffer } from 'react-icons/md'
 import DriveImage from '../../../components/DriveImage.jsx'
 import Field from '../../../components/Field.jsx'
+import FilterPanel from '../../../components/FilterPanel.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { isSaleActive } from '../../catalog/salePrice.js'
 import { DEFAULT_BASE_VARIANT_NAME } from '../../catalog/variants.js'
@@ -13,13 +14,20 @@ import {
   validateSaleInput,
 } from '../../pricing/sale.js'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { listCollection } from '../../../services/db.js'
 import { applySales } from '../../../services/promotions.js'
 import { clearCatalogCache, normalizeProduct } from '../../../services/storefront.js'
 import { formatDateTime, fromInputValue } from '../../../utils/dates.js'
 import { errorMessage } from '../../../utils/errors.js'
 import { formatCRC, normalizeText, toInt } from '../../../utils/format.js'
-import { btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
+import {
+  actionRowClass,
+  btnPrimary,
+  btnSecondary,
+  cardClass,
+  inputClass,
+} from '../../../utils/ui.js'
 
 const load = async () => {
   const products = await listCollection('products')
@@ -68,6 +76,7 @@ function VariantSaleLine({ product, variant }) {
 }
 
 export default function SalesPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(load)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('todas')
@@ -154,8 +163,14 @@ export default function SalesPage() {
     )
   }
 
-  function remove(products) {
-    if (!window.confirm(`¿Quitar la oferta de ${products.length} camisa(s)?`)) return
+  async function remove(products) {
+    const sure = await dialog.confirm({
+      title: 'Quitar oferta',
+      message: `¿Quitar la oferta de ${products.length} camisa(s)?`,
+      confirmLabel: 'Quitar',
+      danger: true,
+    })
+    if (!sure) return
     const removals = new Map(
       products.map((p) => [p.id, [{ variantId: scopeOf(p) || null, sale: null }]]),
     )
@@ -230,15 +245,16 @@ export default function SalesPage() {
         </label>
         {problem && <p className="text-sm text-muted">{problem}</p>}
         <Notice notice={notice} />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={actionRowClass}>
           <button
             type="button"
             disabled={busy || chosen.length === 0 || Boolean(problem)}
             onClick={apply}
             className={btnPrimary}
           >
-            <MdLocalOffer className="size-5" aria-hidden="true" />
-            Aplicar a {chosen.length} seleccionada(s)
+            <MdLocalOffer className="size-5 max-sm:hidden" aria-hidden="true" />
+            Aplicar a {chosen.length}
+            <span className="max-sm:hidden"> seleccionada(s)</span>
           </button>
           <button
             type="button"
@@ -252,16 +268,25 @@ export default function SalesPage() {
         </div>
       </section>
 
-      <div className={`${cardClass} grid gap-3 sm:grid-cols-2`}>
-        <Field label="Buscar">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nombre de la camisa"
-            className={inputClass}
-          />
-        </Field>
+      <FilterPanel
+        gridClass="sm:grid-cols-2"
+        active={Boolean(search) || filter !== 'todas'}
+        onClear={() => {
+          setSearch('')
+          setFilter('todas')
+        }}
+        search={
+          <Field label="Buscar">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Nombre de la camisa"
+              className={inputClass}
+            />
+          </Field>
+        }
+      >
         <Field label="Mostrar">
           <select value={filter} onChange={(e) => setFilter(e.target.value)} className={inputClass}>
             {FILTERS.map((f) => (
@@ -271,7 +296,7 @@ export default function SalesPage() {
             ))}
           </select>
         </Field>
-      </div>
+      </FilterPanel>
 
       {visible.length === 0 ? (
         <EmptyState>

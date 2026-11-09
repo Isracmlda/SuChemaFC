@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MdAddPhotoAlternate } from 'react-icons/md'
+import { Notice } from './States.jsx'
 import { uploadCatalogImage } from '../services/drive.js'
 import { btnSecondary } from '../utils/ui.js'
 
@@ -40,12 +41,7 @@ export default function ImageUploader({ onUploaded, label = 'Subir imagen', mult
           className="sr-only"
         />
       </label>
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          <span aria-hidden="true">⚠ </span>
-          {error}
-        </p>
-      )}
+      <Notice notice={error ? { type: 'error', text: error } : null} />
     </div>
   )
 }

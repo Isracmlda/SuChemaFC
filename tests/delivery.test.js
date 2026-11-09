@@ -5,10 +5,11 @@ import {
   deliveryBlock,
   deliveryWarning,
   parseQrPayload,
+  buildLabelPayload,
   parseScanInput,
   validateDelivery,
 } from '../src/features/admin/delivery/delivery.js'
-import { buildReceiptModel, pdfMoney, pdfText } from '../src/features/admin/receipts/receipts.js'
+import { buildReceiptModel } from '../src/features/admin/receipts/receipts.js'
 
 const ID = 'AbCdEfGh1234567890Zz' // 20 caracteres, como los IDs de Firestore
 
@@ -39,20 +40,25 @@ const order = (extra = {}) => ({
 })
 
 describe('contenido del QR', () => {
-  it('codifica pedido y línea y se puede leer de vuelta', () => {
-    const text = buildQrPayload(ID, 1)
-    expect(text).toBe(`SCFC:${ID}:1`)
-    expect(parseQrPayload(text)).toEqual({ orderId: ID, lineIndex: 1 })
+  it('codifica el pedido completo y se puede leer de vuelta', () => {
+    const text = buildQrPayload(ID)
+    expect(text).toBe(`SCFC:${ID}`)
+    expect(parseQrPayload(text)).toEqual({ orderId: ID, lineIndex: null })
+  })
+
+  it('sigue leyendo los QR antiguos, que traían la posición de la camisa', () => {
+    expect(parseQrPayload(`SCFC:${ID}:1`)).toEqual({ orderId: ID, lineIndex: 1 })
   })
 
   it('rechaza QR ajenos o mal formados', () => {
     expect(parseQrPayload('https://ejemplo.com')).toBeNull()
-    expect(parseQrPayload('SCFC:corto:1')).toBeNull()
+    expect(parseQrPayload('SCFC:corto')).toBeNull()
     expect(parseQrPayload(`SCFC:${ID}:x`)).toBeNull()
-    expect(parseQrPayload(`XXXX:${ID}:1`)).toBeNull()
+    expect(parseQrPayload(`XXXX:${ID}`)).toBeNull()
   })
 
   it('acepta el QR, el ID completo o la referencia corta escritos a mano', () => {
+    expect(parseScanInput(`  SCFC:${ID} `)).toEqual({ orderId: ID, lineIndex: null })
     expect(parseScanInput(`  SCFC:${ID}:0 `)).toEqual({ orderId: ID, lineIndex: 0 })
     expect(parseScanInput(ID)).toEqual({ orderId: ID, lineIndex: null })
     expect(parseScanInput('abcdefgh')).toEqual({ ref: 'ABCDEFGH' })
@@ -140,25 +146,46 @@ describe('aplicar la entrega', () => {
   })
 })
 
-describe('recibo PDF', () => {
-  it('limpia caracteres que las fuentes del PDF no dibujan', () => {
-    expect(pdfText('Barça ’24 – “Edición”')).toBe('Barça \'24 - "Edición"')
-    expect(pdfText('Camiseta ⚽')).toBe('Camiseta ?')
-    expect(pdfText(null)).toBe('')
-  })
-
-  it('formatea montos sin el símbolo ₡', () => {
-    expect(pdfMoney(1234567)).toBe('CRC 1 234 567')
-    expect(pdfMoney(0)).toBe('CRC 0')
-  })
-
-  it('arma un QR por camisa con sus extras y los totales', () => {
+describe('recibo', () => {
+  it('arma un solo QR para todo el pedido, con los extras y los totales', () => {
     const m = buildReceiptModel(order())
     expect(m.ref).toBe('ABCDEFGH')
-    expect(m.items.map((i) => i.qrPayload)).toEqual([`SCFC:${ID}:0`, `SCFC:${ID}:1`])
-    expect(m.items[0].extras).toEqual(['Parche: Champions', 'Personalizada: ANA 10'])
-    expect(m.items[1].name).toBe('Barça ’24'.replace('’', "'"))
+    expect(m.qrPayload).toBe(`SCFC:${ID}`)
+    expect(m.items).toHaveLength(2)
+    expect(m.items.every((i) => i.qrPayload === undefined)).toBe(true)
+    expect(m.items[0].extras).toEqual(['Parches: Champions', 'Personalizada: ANA 10'])
+    expect(m.items[1].name).toBe('Barça ’24')
     expect(m.totals).toMatchObject({ total: 40000, paid: 20000, balance: 20000 })
-    expect(m.delivery).toMatch(/WhatsApp/)
+    expect(m.delivery).toBe('') // entrega coordinada: sin dirección
+  })
+
+  it('en envíos por Correos el recibo lleva la dirección guardada', () => {
+    const address = {
+      province: 'Alajuela',
+      canton: 'Alajuela',
+      district: 'Alajuela',
+      details: '700 mts',
+    }
+    const m = buildReceiptModel(
+      order({ shippingMethod: 'correos', customer: { name: 'Ana', phone: '88888888', address } }),
+    )
+    expect(m.delivery).toBe('Alajuela, Alajuela, Alajuela. 700 mts')
+  })
+})
+
+describe('guía de rastreo como código de entrega', () => {
+  it('parseScanInput reconoce la guía de rastreo de 32 caracteres hexadecimales', () => {
+    const code = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
+    expect(parseScanInput(code)).toEqual({ trackingCode: code })
+    expect(parseScanInput(code.toUpperCase())).toEqual({ trackingCode: code })
+  })
+
+  it('el QR de la etiqueta lleva la guía y la posición de la camisa', () => {
+    const code = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
+    expect(buildLabelPayload(code, 2)).toBe(`${code}:2`)
+    expect(buildLabelPayload(code, 0)).toBe(`${code}:0`)
+    expect(buildLabelPayload(code, undefined)).toBe(code)
+    expect(parseScanInput(`${code}:2`)).toEqual({ trackingCode: code, lineIndex: 2 })
+    expect(parseScanInput(`${code.toUpperCase()}:0`)).toEqual({ trackingCode: code, lineIndex: 0 })
   })
 })

@@ -28,7 +28,7 @@ var DEFAULTS = {
   SITE_URL: 'https://suchemafc.web.app',
 };
 
-var SCRIPT_VERSION = 5; // súbela al cambiar el código: doGet la muestra y sirve para saber qué versión está activa
+var SCRIPT_VERSION = 6; // súbela al cambiar el código: doGet la muestra y sirve para saber qué versión está activa
 
 var MAX_BYTES = 4 * 1024 * 1024; // tamaño máximo del archivo decodificado
 var RATE_LIMITS = { upload: 10, mail: 10 }; // acciones por usuario no admin dentro de la ventana
@@ -607,10 +607,12 @@ function notifyPaymentApproved_(body) {
 
   // Un pago por aviso: si el navegador reintenta, no se repite; un pago nuevo sí avisa.
   var paymentKey = orderId + '_' + (order.payments ? order.payments.length : 0)
-  if (alreadySent_('paid', paymentKey)) return { ok: true, sent: 0 }
+  // `resend`: el admin pidió reenviar el correo (por ejemplo con el recibo), así que no se descarta.
+  if (!body.resend && alreadySent_('paid', paymentKey)) return { ok: true, sent: 0 }
 
   var paid = Number(order.paidAmount) || 0
   var pending = Math.max(0, (Number(order.total) || 0) - paid)
+  var receipt = receiptAttachment_(body.receiptImage, orderId)
   sendMail_(
     customerEmail,
     'Pago aprobado - pedido ' + orderRef_(orderId) + ' - SuChemaFC',
@@ -630,8 +632,12 @@ function notifyPaymentApproved_(body) {
           ? '<b>Saldo pendiente:</b> ' + money_(pending) + ' (se paga antes de la entrega)'
           : 'Tu pedido está pagado por completo.') +
         '</p>' +
+        (receipt.length
+          ? '<p>Adjuntamos tu recibo con el código QR de tu pedido. Guárdalo: lo necesitarás al recibir tus camisas.</p>'
+          : '') +
         trackingHtml_(order),
     ),
+    receipt,
   )
   markSent_('paid', paymentKey)
   return { ok: true, sent: 1 }
@@ -758,14 +764,35 @@ function mailLayout_(title, content) {
 
 // ---------- Utilidades de correo ----------
 
-function sendMail_(to, subject, html) {
-  MailApp.sendEmail({
+function sendMail_(to, subject, html, attachments) {
+  var options = {
     to: to,
     subject: subject,
     htmlBody: html,
     name: 'SuChemaFC',
     replyTo: adminEmail_(),
-  })
+  }
+  if (attachments && attachments.length) options.attachments = attachments
+  MailApp.sendEmail(options)
+}
+
+/**
+ * Recibo (imagen PNG) que manda el navegador en base64 como adjunto. Se acepta solo si de verdad es
+ * un PNG pequeño; si no, el correo sale sin adjunto en vez de fallar.
+ */
+function receiptAttachment_(base64, orderId) {
+  var text = String(base64 || '')
+  if (!text || text.length > 600000) return []
+  try {
+    var bytes = Utilities.base64Decode(text)
+    // Firma de un PNG: 89 50 4E 47 (los bytes de Apps Script van con signo).
+    var isPng =
+      bytes.length > 8 && bytes[0] === -119 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71
+    if (!isPng) return []
+    return [Utilities.newBlob(bytes, 'image/png', 'recibo-' + orderRef_(orderId) + '.png')]
+  } catch (err) {
+    return []
+  }
 }
 
 /** Correo del cliente si es válido; '' si no lo indicó. */

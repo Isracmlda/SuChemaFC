@@ -5,15 +5,21 @@ import {
   MdCheckCircle,
   MdDeleteForever,
   MdDeleteSweep,
-  MdPictureAsPdf,
   MdReceiptLong,
   MdSave,
   MdThumbDown,
   MdWhatsapp,
 } from 'react-icons/md'
 import StatusBadge from '../../../components/StatusBadge.jsx'
-import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
+import {
+  EmptyState,
+  ErrorState,
+  InlineNotice,
+  Loading,
+  Notice,
+} from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import {
   cancelOrder,
   confirmPayment,
@@ -26,20 +32,31 @@ import {
   saveOrderNotes,
 } from '../../../services/adminOrders.js'
 import { getReceiptDataUrl } from '../../../services/drive.js'
-import { notifyPaymentApproved } from '../../../services/notifications.js'
 import { formatDateTime, toMillis } from '../../../utils/dates.js'
 import { errorMessage } from '../../../utils/errors.js'
 import { formatCRC, toInt } from '../../../utils/format.js'
-import { btnDanger, btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
+import {
+  actionRowClass,
+  actionStackClass,
+  btnDanger,
+  btnPrimary,
+  btnSecondary,
+  cardClass,
+  inputClass,
+} from '../../../utils/ui.js'
 import { SHIPPING_METHODS, orderRef } from '../../checkout/checkout.js'
 import { describeCustom } from '../../personalization/personalization.js'
 import { ORDER_STATUS } from '../../orders/orderStatus.js'
 import Field from '../../../components/Field.jsx'
+import FilterPanel from '../../../components/FilterPanel.jsx'
+import { emailReceipt } from '../receipts/receiptActions.js'
+import OrderReceipt from './OrderReceipt.jsx'
 import {
   advanceMissing,
   balance,
   canCancel,
   canConfirmPayment,
+  canIssueReceipt,
   canReject,
   countByStatus,
   customerWhatsApp,
@@ -72,11 +89,6 @@ function Receipt({ order }) {
     }
   }
 
-  if (!order.receiptFileId) {
-    return (
-      <p className="text-sm text-muted">Sin comprobante en Drive (ya se revisó o no se subió).</p>
-    )
-  }
   return (
     <div className="flex flex-col gap-2">
       {!state.url && (
@@ -97,7 +109,7 @@ function Receipt({ order }) {
   )
 }
 
-function PaymentForm({ order, onDone }) {
+function PaymentForm({ order, onSaved }) {
   const [reference, setReference] = useState('')
   const [amount, setAmount] = useState(advanceMissing(order) || balance(order))
   const [duplicate, setDuplicate] = useState(null)
@@ -115,32 +127,17 @@ function PaymentForm({ order, onDone }) {
     event.preventDefault()
     setBusy(true)
     setNotice(null)
+    let result
     try {
-      await confirmPayment(order, { reference, amount })
+      result = await confirmPayment(order, { reference, amount })
     } catch (e) {
       setNotice({ type: 'error', text: errorMessage(e) })
-      setBusy(false)
       return
+    } finally {
+      setBusy(false)
     }
-    let text = 'Pago registrado.'
-    let type = 'ok'
-    // El borrado de Drive y el correo al cliente son independientes: van en paralelo.
-    const [drive, mailed] = await Promise.allSettled([
-      deleteReceipt(order),
-      notifyPaymentApproved(order.id),
-    ])
-    if (drive.status === 'fulfilled') {
-      text += ' El comprobante se borró de Drive.'
-    } else {
-      type = 'error'
-      text += ` Pero no se pudo borrar el comprobante de Drive: ${errorMessage(drive.reason)}`
-    }
-    if (mailed.value) text += ' Se avisó al cliente por correo.'
-    else if (order.customer?.email) {
-      type = 'error'
-      text += ' No se pudo enviar el correo al cliente.'
-    }
-    onDone({ type, text })
+    // Pago guardado: el padre reemplaza este formulario y sigue con Drive y el correo aparte.
+    onSaved(result)
   }
 
   return (
@@ -174,7 +171,7 @@ function PaymentForm({ order, onDone }) {
         </Field>
       </div>
       {duplicate && (
-        <Notice
+        <InlineNotice
           notice={{
             type: 'error',
             text: `Comprobante duplicado: ya se usó en el pedido ${orderRef(duplicate.orderId)}.`,
@@ -183,10 +180,6 @@ function PaymentForm({ order, onDone }) {
       )}
       {reference && problem && <p className="text-sm text-danger">⚠ {problem}</p>}
       <Notice notice={notice} />
-      <p className="text-sm text-muted">
-        Al confirmar se registra el pago, se actualiza el estado y se borra la foto del comprobante
-        de Drive.
-      </p>
       <button
         type="submit"
         disabled={busy || Boolean(problem) || Boolean(duplicate)}
@@ -199,8 +192,8 @@ function PaymentForm({ order, onDone }) {
   )
 }
 
-function ReasonAction({ label, icon: Icon, danger, placeholder, required, onSubmit }) {
-  const [open, setOpen] = useState(false)
+/** Formulario de motivo (rechazar o cancelar). `onClose` lo cierra sin enviar. */
+function ReasonForm({ label, icon: Icon, danger, placeholder, required, onSubmit, onClose }) {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -217,18 +210,6 @@ function ReasonAction({ label, icon: Icon, danger, placeholder, required, onSubm
     }
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={danger ? btnDanger : btnSecondary}
-      >
-        <Icon className="size-5" aria-hidden="true" />
-        {label}
-      </button>
-    )
-  }
   return (
     <form onSubmit={submit} className={`${cardClass} flex flex-col gap-2`}>
       <Field label={`${label}: motivo`} hint="El cliente lo verá en su rastreo.">
@@ -243,12 +224,12 @@ function ReasonAction({ label, icon: Icon, danger, placeholder, required, onSubm
         />
       </Field>
       {error && <Notice notice={{ type: 'error', text: errorMessage(error) }} />}
-      <div className="flex flex-wrap gap-2">
+      <div className={actionRowClass}>
         <button type="submit" disabled={busy} className={danger ? btnDanger : btnPrimary}>
           <Icon className="size-5" aria-hidden="true" />
           {busy ? 'Guardando…' : label}
         </button>
-        <button type="button" onClick={() => setOpen(false)} className={btnSecondary}>
+        <button type="button" onClick={onClose} className={btnSecondary}>
           Volver
         </button>
       </div>
@@ -256,52 +237,19 @@ function ReasonAction({ label, icon: Icon, danger, placeholder, required, onSubm
   )
 }
 
-function ReceiptDownloads({ order }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-
-  async function download(only) {
-    setBusy(true)
-    setError(null)
-    try {
-      const { createReceiptPdf, downloadBlob } = await import('../receipts/receiptPdf.js')
-      downloadBlob(await createReceiptPdf(order, { only }))
-    } catch (e) {
-      setError(e)
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function ReasonAction(props) {
+  const { label, icon: Icon, danger } = props
+  const [open, setOpen] = useState(false)
+  if (open) return <ReasonForm {...props} onClose={() => setOpen(false)} />
   return (
-    <section className={`${cardClass} flex flex-col gap-3`}>
-      <h3 className="font-bold">Recibo PDF con códigos QR</h3>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => download(null)}
-          className={btnSecondary}
-        >
-          <MdPictureAsPdf className="size-5" aria-hidden="true" />
-          {busy ? 'Generando…' : 'Recibo del pedido'}
-        </button>
-        {order.lines.length > 1 &&
-          order.lines.map((l, i) => (
-            <button
-              key={i}
-              type="button"
-              disabled={busy}
-              onClick={() => download(i)}
-              className={btnSecondary}
-            >
-              <MdPictureAsPdf className="size-5" aria-hidden="true" />
-              Camisa {i + 1}: {l.name} ({l.size})
-            </button>
-          ))}
-      </div>
-      {error && <Notice notice={{ type: 'error', text: errorMessage(error) }} />}
-    </section>
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className={danger ? btnDanger : btnSecondary}
+    >
+      <Icon className="size-5" aria-hidden="true" />
+      {label}
+    </button>
   )
 }
 
@@ -333,28 +281,39 @@ function NotesForm({ order, initial }) {
 
   return (
     <div className={`${cardClass} flex flex-col gap-2`}>
-      <Field label="Notas internas" hint="Solo las ve el admin.">
-        <textarea
-          rows={3}
-          maxLength={2000}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className={`${inputClass} py-2`}
-        />
+      <Field label="Notas internas">
+        <div className="relative">
+          <textarea
+            rows={4}
+            maxLength={2000}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className={`${inputClass} py-2 pb-12`}
+          />
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            className={`${btnSecondary} absolute bottom-2 right-2 min-h-9! bg-surface px-3!`}
+          >
+            <MdSave className="size-5" aria-hidden="true" />
+            {busy ? 'Guardando…' : 'Guardar notas'}
+          </button>
+        </div>
       </Field>
       <Notice notice={notice} />
-      <button type="button" onClick={save} disabled={busy} className={btnSecondary}>
-        <MdSave className="size-5" aria-hidden="true" />
-        Guardar notas
-      </button>
     </div>
   )
 }
 
 function OrderDetail({ order, onBack, onChanged, onDeleted }) {
+  const dialog = useDialog()
   const [notice, setNotice] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
   const [rejectLink, setRejectLink] = useState('')
+  // Tras guardar un pago: { order (ya con el pago), drive, mail } con el avance de lo que sigue.
+  const [paid, setPaid] = useState(null)
   const origin = window.location.origin
   const addr = order.customer?.address
   const done = (n) => {
@@ -362,7 +321,43 @@ function OrderDetail({ order, onBack, onChanged, onDeleted }) {
     onChanged()
   }
 
-  const wa = customerWhatsApp(order, 'confirmado', { origin })
+  // Pedido con el pago recién guardado, hasta que la lista recargada lo traiga.
+  const current =
+    paid && (order.payments?.length ?? 0) < paid.order.payments.length ? paid.order : order
+
+  /**
+   * El pago ya quedó guardado: la pantalla cambia enseguida y el borrado de Drive y el correo siguen
+   * por separado, para que una respuesta lenta del script no deje la pantalla esperando. El correo
+   * (con el recibo adjunto) solo sale si el pago dejó el pedido confirmado; un pago parcial no lo manda.
+   */
+  function onPaymentSaved(result) {
+    const updated = {
+      ...order,
+      payments: result.payments,
+      paidAmount: result.paidAmount,
+      status: result.status,
+    }
+    const sendsMail = result.statusChanged && Boolean(order.customer?.email)
+    const step = (patch) => setPaid((p) => p && { ...p, ...patch })
+    setPaid({
+      order: updated,
+      drive: order.receiptFileId ? 'working' : 'none',
+      mail: sendsMail ? 'working' : 'none',
+    })
+    onChanged()
+    if (order.receiptFileId) {
+      deleteReceipt(order).then(
+        () => {
+          step({ drive: 'ok' })
+          onChanged()
+        },
+        (e) => step({ drive: 'error', driveError: errorMessage(e) }),
+      )
+    }
+    if (sendsMail) {
+      emailReceipt(updated).then((ok) => step({ mail: ok ? 'ok' : 'error' }))
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -446,27 +441,36 @@ function OrderDetail({ order, onBack, onChanged, onDeleted }) {
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h3 className="font-bold">Comprobante</h3>
-        <Receipt key={order.receiptFileId ?? 'none'} order={order} />
-      </section>
+      {/* La foto del comprobante solo está mientras no se haya borrado de Drive. */}
+      {order.receiptFileId && (
+        <section className="flex flex-col gap-3">
+          <h3 className="font-bold">Comprobante</h3>
+          <Receipt key={order.receiptFileId} order={order} />
+        </section>
+      )}
 
-      {canConfirmPayment(order) && <PaymentForm order={order} onDone={done} />}
+      {/* «Comprobar pago» se oculta apenas el pedido queda confirmado. */}
+      {canConfirmPayment(current) && (
+        <PaymentForm key={current.payments?.length ?? 0} order={current} onSaved={onPaymentSaved} />
+      )}
 
-      <div className="flex flex-wrap gap-2">
-        {wa && totalPaid(order) > 0 && (
-          <a href={wa} target="_blank" rel="noopener noreferrer" className={btnSecondary}>
-            <MdWhatsapp className="size-5" aria-hidden="true" />
-            Avisar pago confirmado
-          </a>
-        )}
-        {rejectLink && (
+      {/* El recibo aparece (y se manda por correo) solo con el pedido ya confirmado. */}
+      {canIssueReceipt(current) && (
+        <OrderReceipt
+          order={current}
+          whatsapp={customerWhatsApp(current, 'confirmado', { origin })}
+          follow={paid}
+        />
+      )}
+
+      {rejectLink && (
+        <div className={actionStackClass}>
           <a href={rejectLink} target="_blank" rel="noopener noreferrer" className={btnSecondary}>
             <MdWhatsapp className="size-5" aria-hidden="true" />
             Avisar rechazo
           </a>
-        )}
-      </div>
+        </div>
+      )}
 
       {canReject(order) && (
         <ReasonAction
@@ -482,92 +486,110 @@ function OrderDetail({ order, onBack, onChanged, onDeleted }) {
           }}
         />
       )}
-      {canCancel(order) && (
-        <ReasonAction
+      <Notes order={order} />
+
+      {/* Cancelar y eliminar: siempre en una sola línea, al fondo de la pantalla. */}
+      {canCancel(order) && cancelOpen && (
+        <ReasonForm
           label="Cancelar pedido"
           icon={MdCancel}
           danger
           placeholder="Opcional"
+          onClose={() => setCancelOpen(false)}
           onSubmit={async (reason) => {
             await cancelOrder(order, reason)
+            setCancelOpen(false)
             done({ type: 'ok', text: 'Pedido cancelado.' })
           }}
         />
       )}
-
-      <button
-        type="button"
-        disabled={deleting}
-        onClick={async () => {
-          if (
-            !window.confirm(
-              `¿Eliminar para siempre el pedido ${orderRef(order.id)}? Se borran también su rastreo, sus notas y el comprobante de Drive. No se puede deshacer.`,
-            )
-          ) {
-            return
-          }
-          setDeleting(true)
-          try {
-            const { driveFailed } = await deleteOrder(order)
-            onDeleted({
-              type: driveFailed ? 'error' : 'ok',
-              text: driveFailed
-                ? `Pedido ${orderRef(order.id)} eliminado, pero no se pudo borrar la foto del comprobante en Drive.`
-                : `Pedido ${orderRef(order.id)} eliminado.`,
+      <div className={actionRowClass}>
+        {canCancel(order) && (
+          <button
+            type="button"
+            aria-expanded={cancelOpen}
+            onClick={() => setCancelOpen((o) => !o)}
+            className={btnDanger}
+          >
+            <MdCancel className="size-5" aria-hidden="true" />
+            Cancelar pedido
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={deleting}
+          onClick={async () => {
+            const yes = await dialog.confirm({
+              title: 'Eliminar pedido',
+              message: `¿Eliminar para siempre el pedido ${orderRef(order.id)}? Se borran también su rastreo, sus notas y el comprobante de Drive. No se puede deshacer.`,
+              confirmLabel: 'Eliminar para siempre',
+              danger: true,
             })
-          } catch (e) {
-            setNotice({ type: 'error', text: errorMessage(e) })
-            setDeleting(false)
-          }
-        }}
-        className={`${btnDanger} self-start`}
-      >
-        <MdDeleteForever className="size-5" aria-hidden="true" />
-        {deleting ? 'Eliminando…' : 'Eliminar pedido'}
-      </button>
-
-      <ReceiptDownloads order={order} />
-
-      <Notes order={order} />
+            if (!yes) return
+            setDeleting(true)
+            try {
+              const { driveFailed } = await deleteOrder(order)
+              onDeleted({
+                type: driveFailed ? 'error' : 'ok',
+                text: driveFailed
+                  ? `Pedido ${orderRef(order.id)} eliminado, pero no se pudo borrar la foto del comprobante en Drive.`
+                  : `Pedido ${orderRef(order.id)} eliminado.`,
+              })
+            } catch (e) {
+              setNotice({ type: 'error', text: errorMessage(e) })
+              setDeleting(false)
+            }
+          }}
+          className={btnDanger}
+        >
+          <MdDeleteForever className="size-5" aria-hidden="true" />
+          {deleting ? 'Eliminando…' : 'Eliminar pedido'}
+        </button>
+      </div>
     </div>
   )
 }
 
+const DEFAULT_ORDER_FILTER = 'pago_pendiente_revision'
+
 function OrderList({ orders, onOpen }) {
-  const [status, setStatus] = useState('pago_pendiente_revision')
+  const [status, setStatus] = useState(DEFAULT_ORDER_FILTER)
   const [query, setQuery] = useState('')
   const counts = countByStatus(orders)
   const shown = filterOrders(orders, { status, query })
 
-  const chips = [['all', 'Todos'], ...Object.entries(ORDER_STATUS)]
+  const options = [['all', 'Todos'], ...Object.entries(ORDER_STATUS)]
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por estado">
-        {chips.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={status === value}
-            onClick={() => setStatus(value)}
-            className={`min-h-11 rounded-md border px-3 text-sm font-semibold ${
-              status === value
-                ? 'border-accent-solid bg-accent-solid text-on-accent'
-                : 'border-border-strong hover:border-accent hover:text-accent'
-            }`}
-          >
-            {label} ({counts[value] ?? 0})
-          </button>
-        ))}
-      </div>
-      <Field label="Buscar" hint="Referencia, nombre o teléfono.">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className={inputClass}
-        />
-      </Field>
+      <FilterPanel
+        gridClass="sm:grid-cols-1"
+        active={Boolean(query) || status !== DEFAULT_ORDER_FILTER}
+        onClear={() => {
+          setQuery('')
+          setStatus(DEFAULT_ORDER_FILTER)
+        }}
+        search={
+          <Field label="Buscar" hint="Referencia, nombre o teléfono.">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+        }
+      >
+        <Field label="Estado">
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
+            {options.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label} ({counts[value] ?? 0})
+              </option>
+            ))}
+          </select>
+        </Field>
+      </FilterPanel>
 
       {shown.length === 0 ? (
         <EmptyState>No hay pedidos con ese filtro.</EmptyState>

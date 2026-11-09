@@ -4,6 +4,7 @@ import CheckList from '../../../components/CheckList.jsx'
 import Field from '../../../components/Field.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { listCollection } from '../../../services/db.js'
 import {
   deleteCoupon,
@@ -237,6 +238,7 @@ function CouponForm({ data, initial, isNew, onDone }) {
 }
 
 export default function CouponsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(load)
   const [form, setForm] = useState(null) // { initial, isNew }
   const [notice, setNotice] = useState(null)
@@ -353,10 +355,15 @@ export default function CouponsPage() {
                   aria-label={`Eliminar ${c.id}`}
                   title="Eliminar"
                   disabled={busy}
-                  onClick={() =>
-                    window.confirm(`¿Eliminar el cupón ${c.id}?`) &&
-                    act(() => deleteCoupon(c), 'Cupón eliminado.')
-                  }
+                  onClick={async () => {
+                    const sure = await dialog.confirm({
+                      title: 'Eliminar cupón',
+                      message: `¿Eliminar el cupón ${c.id}?`,
+                      confirmLabel: 'Eliminar',
+                      danger: true,
+                    })
+                    if (sure) act(() => deleteCoupon(c), 'Cupón eliminado.')
+                  }}
                   className={btnIcon}
                 >
                   <MdDelete className="size-5" aria-hidden="true" />

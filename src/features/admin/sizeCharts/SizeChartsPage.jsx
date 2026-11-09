@@ -3,12 +3,20 @@ import { MdAdd, MdClose, MdDelete, MdEdit } from 'react-icons/md'
 import Field from '../../../components/Field.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { deleteSizeChart, saveSizeChart, seedSizeCharts } from '../../../services/catalog.js'
 import { listCollection } from '../../../services/db.js'
 import { clearCatalogCache } from '../../../services/storefront.js'
 import { errorMessage } from '../../../utils/errors.js'
 import { nextOrder } from '../../../utils/tree.js'
-import { btnIcon, btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
+import {
+  actionStackClass,
+  btnIcon,
+  btnPrimary,
+  btnSecondary,
+  cardClass,
+  inputClass,
+} from '../../../utils/ui.js'
 import { ChartTable } from '../../sizeChart/SizeGuide.jsx'
 import {
   MEASURE_KINDS,
@@ -24,6 +32,7 @@ import {
 const loadCharts = () => listCollection('sizeCharts')
 
 export default function SizeChartsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(loadCharts)
   const [form, setForm] = useState(null) // null = cerrado
   const [notice, setNotice] = useState(null)
@@ -67,16 +76,25 @@ export default function SizeChartsPage() {
   }
 
   async function handleDelete(chart) {
-    if (!window.confirm(`¿Eliminar la categoría "${chart.name}"?`)) return
+    const sure = await dialog.confirm({
+      title: 'Eliminar categoría',
+      message: `¿Eliminar la categoría "${chart.name}"?`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!sure) return
     if (await run(() => deleteSizeChart(chart), 'Categoría eliminada.')) reload()
   }
 
   async function handleSeed() {
     if (
       charts.length > 0 &&
-      !window.confirm(
-        'Se cargarán las guías del proveedor. Si ya tienes una con el mismo nombre, se reemplaza por la del proveedor. ¿Continuar?',
-      )
+      !(await dialog.confirm({
+        title: 'Cargar guías del proveedor',
+        message:
+          'Se cargarán las guías del proveedor. Si ya tienes una con el mismo nombre, se reemplaza por la del proveedor. ¿Continuar?',
+        confirmLabel: 'Continuar',
+      }))
     ) {
       return
     }
@@ -229,7 +247,7 @@ export default function SizeChartsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
+      <div className={actionStackClass}>
         <button
           type="button"
           onClick={() => {

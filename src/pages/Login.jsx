@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import googleG from '../assets/google-g.svg'
 import Logo from '../components/Logo.jsx'
+import { Notice } from '../components/States.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import { authErrorMessage, signInWithGoogle } from '../services/auth.js'
 
@@ -56,12 +57,7 @@ export default function Login() {
         {busy ? 'Abriendo Google…' : 'Continuar con Google'}
       </button>
 
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          <span aria-hidden="true">⚠ </span>
-          {error}
-        </p>
-      )}
+      <Notice notice={error ? { type: 'error', text: error } : null} />
     </section>
   )
 }

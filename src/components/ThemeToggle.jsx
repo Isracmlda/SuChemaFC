@@ -1,5 +1,6 @@
 import { MdDarkMode, MdLightMode } from 'react-icons/md'
 import { useTheme } from '../hooks/useTheme.js'
+import { navIconClass } from '../utils/ui.js'
 import Tooltip from './Tooltip.jsx'
 
 /** Botón de solo ícono para cambiar de tema. Pensado para el navbar, que siempre es negro. */
@@ -11,13 +12,8 @@ export default function ThemeToggle() {
 
   return (
     <Tooltip label={label} align="end">
-      <button
-        type="button"
-        onClick={toggleTheme}
-        aria-label={label}
-        className="inline-flex size-11 items-center justify-center rounded-md border border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-brand-black"
-      >
-        <Icon className="size-6" aria-hidden="true" />
+      <button type="button" onClick={toggleTheme} aria-label={label} className={navIconClass}>
+        <Icon className="size-5" aria-hidden="true" />
       </button>
     </Tooltip>
   )

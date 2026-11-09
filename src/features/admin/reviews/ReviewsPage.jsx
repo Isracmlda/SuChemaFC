@@ -7,7 +7,7 @@ import { listCollection } from '../../../services/db.js'
 import { approveReview, listPendingReviews, rejectReview } from '../../../services/reviews.js'
 import { formatDateTime, toMillis } from '../../../utils/dates.js'
 import { errorMessage } from '../../../utils/errors.js'
-import { btnDanger, btnPrimary, cardClass } from '../../../utils/ui.js'
+import { actionRowClass, btnDanger, btnPrimary, cardClass } from '../../../utils/ui.js'
 import Stars from '../../reviews/Stars.jsx'
 import { sortReviews } from '../../reviews/reviews.js'
 
@@ -60,7 +60,7 @@ function PendingReview({ review, productName, onDone }) {
         </ul>
       )}
       <Notice notice={notice} />
-      <div className="flex flex-wrap gap-2">
+      <div className={actionRowClass}>
         <button
           type="button"
           disabled={busy}

@@ -6,6 +6,7 @@ import {
   buildCustomerMessage,
   canCancel,
   canConfirmPayment,
+  canIssueReceipt,
   canReject,
   countByStatus,
   customerWhatsApp,
@@ -110,6 +111,20 @@ describe('acciones permitidas', () => {
     expect(canConfirmPayment(order())).toBe(true)
     expect(canConfirmPayment(order({ payments: [{ amount: 40000 }] }))).toBe(false)
     expect(canConfirmPayment(order({ status: 'cancelado', deleted: true }))).toBe(false)
+  })
+
+  it('"Comprobar pago" se oculta una vez que el adelanto se confirma', () => {
+    expect(canConfirmPayment(order({ status: 'pago_rechazado' }))).toBe(true)
+    expect(canConfirmPayment(order({ status: 'adelanto_confirmado' }))).toBe(false)
+    expect(canConfirmPayment(order({ status: 'en_camino' }))).toBe(false)
+  })
+
+  it('el recibo aparece solo después de confirmar el pedido', () => {
+    expect(canIssueReceipt(order())).toBe(false)
+    expect(canIssueReceipt(order({ status: 'pago_rechazado' }))).toBe(false)
+    expect(canIssueReceipt(order({ status: 'adelanto_confirmado' }))).toBe(true)
+    expect(canIssueReceipt(order({ status: 'entregado' }))).toBe(true)
+    expect(canIssueReceipt(order({ status: 'cancelado', deleted: true }))).toBe(false)
   })
 })
 

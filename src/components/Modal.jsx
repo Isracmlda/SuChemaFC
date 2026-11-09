@@ -5,7 +5,7 @@ import { MdClose } from 'react-icons/md'
  * Ventana modal con <dialog> (maneja el foco y la tecla Esc). El contenido solo existe mientras
  * está abierta, así sus formularios empiezan limpios cada vez. Debe ir FUERA de cualquier <form>.
  */
-export default function Modal({ open, onClose, title, children }) {
+export default function Modal({ open, onClose, title, children, width = 'w-[min(94vw,44rem)]' }) {
   const ref = useRef(null)
   const titleId = useId()
 
@@ -22,7 +22,7 @@ export default function Modal({ open, onClose, title, children }) {
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="m-auto w-[min(94vw,44rem)] rounded-lg border border-border-strong bg-bg p-0 text-fg backdrop:bg-black/70"
+      className={`m-auto ${width} rounded-lg border border-border-strong bg-bg p-0 text-fg backdrop:bg-black/70`}
     >
       {open && (
         <div className="flex max-h-[88vh] flex-col gap-4 overflow-y-auto p-5">

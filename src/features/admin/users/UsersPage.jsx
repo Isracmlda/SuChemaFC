@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { MdDelete, MdPerson } from 'react-icons/md'
 import Field from '../../../components/Field.jsx'
+import FilterPanel from '../../../components/FilterPanel.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { useAuth } from '../../../hooks/useAuth.js'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { deleteUser, grantAdmin, listUserRows, revokeAdmin } from '../../../services/adminUsers.js'
 import { formatDateTime } from '../../../utils/dates.js'
 import { errorMessage } from '../../../utils/errors.js'
@@ -13,6 +15,7 @@ import { filterUsers } from './users.js'
 /** Panel de usuarios: buscar por nombre o correo, dar o quitar el rol de admin y eliminar. */
 export default function UsersPage() {
   const { user: me } = useAuth()
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(listUserRows)
   const [filters, setFilters] = useState({ name: '', email: '', role: '' })
   const [notice, setNotice] = useState(null)
@@ -38,29 +41,35 @@ export default function UsersPage() {
     }
   }
 
-  function toggleAdmin(row) {
+  async function toggleAdmin(row) {
     const name = row.email || row.displayName
     if (row.isAdmin) {
-      if (!window.confirm(`¿Quitar el rol de administrador a ${name}?`)) return
-      run(row, revokeAdmin, 'Rol de administrador retirado.')
+      const sure = await dialog.confirm({
+        title: 'Quitar administrador',
+        message: `¿Quitar el rol de administrador a ${name}?`,
+        confirmLabel: 'Quitar rol',
+        danger: true,
+      })
+      if (sure) run(row, revokeAdmin, 'Rol de administrador retirado.')
     } else {
-      if (
-        !window.confirm(`¿Dar el rol de administrador a ${name}? Podrá gestionar toda la tienda.`)
-      )
-        return
-      run(row, grantAdmin, 'Rol de administrador otorgado.')
+      const sure = await dialog.confirm({
+        title: 'Dar administrador',
+        message: `¿Dar el rol de administrador a ${name}? Podrá gestionar toda la tienda.`,
+        confirmLabel: 'Dar rol',
+      })
+      if (sure) run(row, grantAdmin, 'Rol de administrador otorgado.')
     }
   }
 
-  function remove(row) {
+  async function remove(row) {
     const name = row.email || row.displayName
-    if (
-      !window.confirm(
-        `¿Eliminar a ${name}? Se borra su cuenta y su perfil, pero sus pedidos se conservan.`,
-      )
-    )
-      return
-    run(row, deleteUser, 'Usuario eliminado.')
+    const sure = await dialog.confirm({
+      title: 'Eliminar usuario',
+      message: `¿Eliminar a ${name}? Se borra su cuenta y su perfil, pero sus pedidos se conservan.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (sure) run(row, deleteUser, 'Usuario eliminado.')
   }
 
   return (
@@ -71,16 +80,21 @@ export default function UsersPage() {
         quitar ni eliminar.
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Nombre">
-          <input
-            type="search"
-            value={filters.name}
-            onChange={(e) => set({ name: e.target.value })}
-            placeholder="Buscar por nombre"
-            className={inputClass}
-          />
-        </Field>
+      <FilterPanel
+        active={Boolean(filters.name || filters.email || filters.role)}
+        onClear={() => setFilters({ name: '', email: '', role: '' })}
+        search={
+          <Field label="Nombre">
+            <input
+              type="search"
+              value={filters.name}
+              onChange={(e) => set({ name: e.target.value })}
+              placeholder="Buscar por nombre"
+              className={inputClass}
+            />
+          </Field>
+        }
+      >
         <Field label="Correo">
           <input
             type="search"
@@ -101,7 +115,7 @@ export default function UsersPage() {
             <option value="cliente">Clientes</option>
           </select>
         </Field>
-      </div>
+      </FilterPanel>
 
       <Notice notice={notice} />
 

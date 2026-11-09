@@ -22,7 +22,14 @@ import SizeSurchargesEditor from './SizeSurchargesEditor.jsx'
 import VariantEditor from './VariantEditor.jsx'
 import VisibleSizesEditor from './VisibleSizesEditor.jsx'
 import { filterPatchGroups, RECENT_LIMIT } from './patchFilter.js'
-import { makeVariantId, validateSizes, validateVariants } from './productAdmin.js'
+import { chartSizes } from '../../sizeChart/chart.js'
+import {
+  applyChartSizes,
+  makeVariantId,
+  validateChartId,
+  validateSizes,
+  validateVariants,
+} from './productAdmin.js'
 
 const EMPTY = {
   name: '',
@@ -234,6 +241,15 @@ function FormBody({ data, onDone }) {
       return
     }
 
+    const chartErr = validateChartId(
+      p.sizeChartId,
+      data.sizeCharts.map((c) => c.id),
+    )
+    if (chartErr) {
+      setNotice({ type: 'error', text: chartErr })
+      return
+    }
+
     if (p.sizes != null) {
       const sizesErr = validateSizes(p.sizes, 'Camisa base')
       if (sizesErr) {
@@ -259,7 +275,8 @@ function FormBody({ data, onDone }) {
       await createTags(
         pendingIds.filter((id) => p.tagIds.includes(id)).map((id) => ({ id, name: tagName(id) })),
       )
-      await saveProduct(p, cost, variantCosts)
+      // Las tallas guardadas se ajustan a la guía asignada a la camisa y a cada versión.
+      await saveProduct(applyChartSizes(p, data.sizeCharts), cost, variantCosts)
       onDone()
     } catch (e) {
       setNotice({ type: 'error', text: errorMessage(e) })
@@ -271,7 +288,16 @@ function FormBody({ data, onDone }) {
     .sort((a, b) => a.order - b.order)
     .map((c) => ({ id: c.id, label: c.name }))
   const patchItems = shownGroups.map((g) => ({ id: g.id, label: g.name }))
-  const visibleSizes = p.sizes?.length ? p.sizes : SIZES
+  const baseChart = data.sizeCharts.find((c) => c.id === p.sizeChartId) ?? null
+  const baseChartSizes = chartSizes(baseChart)
+  const visibleSizes = baseChart
+    ? (() => {
+        const picked = baseChartSizes.filter((s) => p.sizes?.includes(s))
+        return picked.length > 0 ? picked : baseChartSizes
+      })()
+    : p.sizes?.length
+      ? p.sizes
+      : SIZES
 
   return (
     <>
@@ -313,24 +339,12 @@ function FormBody({ data, onDone }) {
                 />
               </Field>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Precio base (₡)">
                   <NumberInput required value={p.price} onChange={(price) => set({ price })} />
                 </Field>
-                <Field
-                  label={
-                    <>
-                      Costo del proveedor (₡){' '}
-                      <span className="font-normal text-muted">· Privado</span>
-                    </>
-                  }
-                >
+                <Field label="Costo del proveedor (₡)">
                   <NumberInput value={cost} onChange={setCost} />
-                </Field>
-                <Field label="Margen estimado" hint="Precio menos costo">
-                  <div className="flex h-11 items-center px-3 font-bold text-accent">
-                    {formatCRC(p.price - cost)}
-                  </div>
                 </Field>
               </div>
             </div>
@@ -570,10 +584,30 @@ function FormBody({ data, onDone }) {
         </CollapsibleCard>
 
         <CollapsibleCard title="Tallas y recargos">
+          <Field
+            label="Guía de tallas de la versión base"
+            hint="La guía que verá el cliente con esta versión. Sus tallas son las que puedes ofrecer. Las versiones adicionales pueden usar otra."
+          >
+            <select
+              value={p.sizeChartId ?? ''}
+              // Las tallas pertenecen a la guía: al cambiarla se vuelven a elegir.
+              onChange={(e) => set({ sizeChartId: e.target.value || undefined, sizes: undefined })}
+              className={inputClass}
+            >
+              <option value="">(Sin guía de tallas)</option>
+              {data.sizeCharts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <VisibleSizesEditor
             value={p.sizes}
             onChange={(sizes) => set({ sizes })}
             label="Tallas visibles de la versión base"
+            chart={baseChart}
           />
 
           <hr className="my-2 border-border" />

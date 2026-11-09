@@ -8,6 +8,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  where,
 } from 'firebase/firestore'
 import { applyPayment, normalizeReference, timelineEntry } from '../features/admin/orders/review.js'
 import { commitWithAudit } from './audit.js'
@@ -144,10 +145,16 @@ export const rejectPayment = (order, reason) =>
 export const cancelOrder = (order, reason = '') =>
   changeStatus(order, 'cancelado', { note: reason.trim(), action: 'eliminar', deleted: true })
 
+/** Trabajos de impresión (recibos para PuraPrint) que se guardaron de este pedido. */
+async function printJobDeletes(orderId) {
+  const snap = await getDocs(query(collection(db, 'printJobs'), where('orderId', '==', orderId)))
+  return snap.docs.map((d) => ({ type: 'delete', ref: d.ref }))
+}
+
 /**
- * Elimina el pedido para siempre: pedido, rastreo público, notas internas y los números de
- * comprobante que registró (quedan libres). La foto de Drive se manda a la papelera; si Drive
- * falla, el pedido se elimina igual y se avisa con `driveFailed`.
+ * Elimina el pedido para siempre: pedido, rastreo público, notas internas, recibos guardados para
+ * imprimir y los números de comprobante que registró (quedan libres). La foto de Drive se manda a
+ * la papelera; si Drive falla, el pedido se elimina igual y se avisa con `driveFailed`.
  */
 export async function deleteOrder(order) {
   let driveFailed = false
@@ -159,11 +166,13 @@ export async function deleteOrder(order) {
     }
   }
   const refs = [...new Set((order.payments ?? []).map((p) => p.ref).filter(Boolean))]
+  const jobs = await printJobDeletes(order.id)
   await commitWithAudit(
     [
       { type: 'delete', ref: docRef('orders', order.id) },
       { type: 'delete', ref: docRef('orderTracking', order.trackingCode) },
       { type: 'delete', ref: docRef('orderPrivate', order.id) },
+      ...jobs,
       ...refs.map((ref) => ({ type: 'delete', ref: docRef('paymentRefs', ref) })),
     ],
     {

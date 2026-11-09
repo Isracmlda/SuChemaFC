@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { chartSizes } from '../src/features/sizeChart/chart.js'
 import {
+  applyChartSizes,
   areSizesStandard,
   cleanVariantCosts,
   cleanVariantForSave,
   makeVariantId,
   normalizeSizes,
   parseCustomSizes,
+  validateChartId,
   validateSizes,
   validateVariants,
 } from '../src/features/admin/catalog/productAdmin.js'
@@ -188,6 +191,59 @@ describe('productAdmin: lógica de administración de versiones y tallas', () =>
         images: ['img1', 'img2'],
         patchGroupIds: ['pg1'],
       })
+    })
+  })
+
+  describe('guías de tallas ↔ tallas ofrecidas', () => {
+    const adulto = { id: 'adulto', rows: [{ size: 'S' }, { size: 'M' }, { size: 'L' }] }
+    const nino = { id: 'nino', rows: [{ size: ' 16 ' }, { size: '18' }, { size: '16' }] }
+    const charts = [adulto, nino]
+
+    it('chartSizes devuelve las tallas únicas en orden de filas', () => {
+      expect(chartSizes(adulto)).toEqual(['S', 'M', 'L'])
+      expect(chartSizes(nino)).toEqual(['16', '18'])
+      expect(chartSizes(undefined)).toEqual([])
+    })
+
+    it('limita las tallas de la base a las de su guía', () => {
+      const out = applyChartSizes({ sizeChartId: 'adulto', sizes: ['M', 'XL', 'S'] }, charts)
+      expect(out.sizes).toEqual(['S', 'M'])
+    })
+
+    it('ofrece todas las de la guía si ninguna seleccionada coincide', () => {
+      expect(applyChartSizes({ sizeChartId: 'nino', sizes: ['S', 'M'] }, charts).sizes).toEqual([
+        '16',
+        '18',
+      ])
+      expect(applyChartSizes({ sizeChartId: 'adulto' }, charts).sizes).toEqual(['S', 'M', 'L'])
+    })
+
+    it('sin guía deja las tallas sin cambios', () => {
+      const p = { sizes: ['S', 'XL'], variants: [{ id: 'v1', sizes: ['2XL'] }] }
+      expect(applyChartSizes(p, charts)).toEqual(p)
+    })
+
+    it('las versiones usan su guía o heredan la de la base', () => {
+      const out = applyChartSizes(
+        {
+          sizeChartId: 'adulto',
+          sizes: ['S', 'M', 'L'],
+          variants: [
+            { id: 'v1', sizeChartId: 'nino', sizes: ['S'] },
+            { id: 'v2', sizes: ['L', 'XL'] },
+          ],
+        },
+        charts,
+      )
+      expect(out.variants[0].sizes).toEqual(['16', '18'])
+      expect(out.variants[1].sizes).toEqual(['L'])
+    })
+
+    it('validateChartId acepta vacío y guías existentes, rechaza inexistentes', () => {
+      expect(validateChartId('', ['adulto'])).toBeNull()
+      expect(validateChartId('adulto', ['adulto'])).toBeNull()
+      expect(validateChartId('x', ['adulto'])).toContain('la guía de tallas seleccionada no existe')
+      expect(validateChartId('x', [])).toBeNull()
     })
   })
 

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import Field from '../../../components/Field.jsx'
+import FilterPanel from '../../../components/FilterPanel.jsx'
 import { EmptyState, ErrorState, Loading } from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
 import { listAudit } from '../../../services/reports.js'
@@ -15,6 +16,7 @@ import {
 } from './audit.js'
 
 const PAGE = 100
+const NO_FILTERS = { action: '', collection: '', query: '', from: '', to: '' }
 
 /** Visor de la bitácora de auditoría: las últimas 100 entradas, con "Cargar anteriores". */
 export default function AuditPage() {
@@ -24,13 +26,7 @@ export default function AuditPage() {
   const [more, setMore] = useState(true)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState(null)
-  const [filters, setFilters] = useState({
-    action: '',
-    collection: '',
-    query: '',
-    from: '',
-    to: '',
-  })
+  const [filters, setFilters] = useState(NO_FILTERS)
 
   if (loading) return <Loading />
   if (error) return <ErrorState error={error} onRetry={reload} />
@@ -63,7 +59,22 @@ export default function AuditPage() {
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Bitácora</h1>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <FilterPanel
+        gridClass="sm:grid-cols-2 lg:grid-cols-5"
+        active={Object.values(filters).some(Boolean)}
+        onClear={() => setFilters(NO_FILTERS)}
+        search={
+          <Field label="Buscar">
+            <input
+              type="search"
+              value={filters.query}
+              onChange={(e) => set({ query: e.target.value })}
+              placeholder="Resumen, ID o admin"
+              className={inputClass}
+            />
+          </Field>
+        }
+      >
         <Field label="Acción">
           <select
             value={filters.action}
@@ -108,16 +119,7 @@ export default function AuditPage() {
             className={inputClass}
           />
         </Field>
-        <Field label="Buscar">
-          <input
-            type="search"
-            value={filters.query}
-            onChange={(e) => set({ query: e.target.value })}
-            placeholder="Resumen, ID o admin"
-            className={inputClass}
-          />
-        </Field>
-      </div>
+      </FilterPanel>
 
       <p role="status" className="text-sm text-muted">
         {shown.length} de {entries.length} entradas cargadas.

@@ -9,10 +9,11 @@ import {
 } from 'react-icons/md'
 import { useAuth } from '../hooks/useAuth.js'
 import { authErrorMessage, signInWithGoogle, signOutUser } from '../services/auth.js'
+import { navIconClass } from '../utils/ui.js'
+import { Notice } from './States.jsx'
 import Tooltip from './Tooltip.jsx'
 
-const iconButtonClass =
-  'inline-flex size-11 items-center justify-center rounded-md border border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-brand-black'
+const iconButtonClass = navIconClass
 
 // Filas con texto para el menú desplegable del móvil.
 export const menuRowClass =
@@ -23,7 +24,7 @@ export const menuRowClass =
  * Con `stacked` se dibuja como lista de filas con texto, para el menú desplegable del móvil.
  */
 export default function UserMenu({ stacked = false }) {
-  const { user, isGuest, isAdmin, configured } = useAuth()
+  const { user, isGuest, showAdminUi, configured } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -53,11 +54,7 @@ export default function UserMenu({ stacked = false }) {
             <MdLogin className="size-6 shrink-0" aria-hidden="true" />
             Ingresar con Google
           </button>
-          {error && (
-            <p role="alert" className="px-3 text-xs text-brand-white">
-              {error}
-            </p>
-          )}
+          <Notice notice={error ? { type: 'error', text: error } : null} />
         </>
       )
     }
@@ -71,83 +68,97 @@ export default function UserMenu({ stacked = false }) {
             aria-label="Ingresar con Google"
             className={`${iconButtonClass} disabled:cursor-wait disabled:opacity-60`}
           >
-            <MdLogin className="size-6" aria-hidden="true" />
+            <MdLogin className="size-5" aria-hidden="true" />
           </button>
         </Tooltip>
-        {error && (
-          <p
-            role="alert"
-            className="absolute right-0 top-full z-50 mt-2 w-60 rounded-md border border-brand-gold bg-brand-black p-2 text-xs text-brand-white"
-          >
-            {error}
-          </p>
-        )}
+        <Notice notice={error ? { type: 'error', text: error } : null} />
       </div>
     )
   }
 
-  const name = user.displayName || user.email || 'Mi cuenta'
-  const avatar = user.photoURL ? (
-    <img
-      src={user.photoURL}
-      alt=""
-      referrerPolicy="no-referrer"
-      className="size-9 rounded-full border border-brand-gold object-cover"
-    />
-  ) : (
-    <MdAccountCircle className="size-9 text-brand-gold" aria-hidden="true" />
-  )
-
   if (stacked) {
     return (
       <>
-        <div className="flex items-center gap-3 px-3 py-2" title={name}>
-          {avatar}
-          <span className="min-w-0 truncate text-sm font-semibold text-brand-white">{name}</span>
+        <div className="flex items-center gap-3 px-3 py-2" title={user.displayName || user.email}>
+          <Avatar user={user} />
+          <span className="min-w-0 truncate text-sm font-semibold text-brand-white">
+            {firstName(user)}
+          </span>
         </div>
         <Link to="/mis-pedidos" className={menuRowClass}>
           <MdReceiptLong className="size-6 shrink-0" aria-hidden="true" />
           Mis pedidos
         </Link>
-        {isAdmin && (
-          <Link to="/admin" className={menuRowClass}>
-            <MdAdminPanelSettings className="size-6 shrink-0" aria-hidden="true" />
-            Administración
-          </Link>
-        )}
         <button type="button" onClick={signOutUser} className={menuRowClass}>
           <MdLogout className="size-6 shrink-0" aria-hidden="true" />
-          Salir
+          Cerrar sesión
         </button>
       </>
     )
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-2" title={name}>
-        {avatar}
-        <span className="hidden max-w-32 truncate text-sm font-semibold text-brand-white sm:inline">
-          {name}
-        </span>
-      </div>
+    <div className="flex items-center gap-0.5">
       <Tooltip label="Mis pedidos">
         <Link to="/mis-pedidos" aria-label="Mis pedidos" className={iconButtonClass}>
-          <MdReceiptLong className="size-6" aria-hidden="true" />
+          <MdReceiptLong className="size-5" aria-hidden="true" />
         </Link>
       </Tooltip>
-      {isAdmin && (
+      {showAdminUi && (
         <Tooltip label="Administración">
           <Link to="/admin" aria-label="Administración" className={iconButtonClass}>
-            <MdAdminPanelSettings className="size-6" aria-hidden="true" />
+            <MdAdminPanelSettings className="size-5" aria-hidden="true" />
           </Link>
         </Tooltip>
       )}
-      <Tooltip label="Salir">
-        <button type="button" onClick={signOutUser} aria-label="Salir" className={iconButtonClass}>
-          <MdLogout className="size-6" aria-hidden="true" />
+    </div>
+  )
+}
+
+/** Solo el primer nombre (sin apellidos); si no hay nombre, la parte local del correo. */
+function firstName(user) {
+  return user.displayName?.trim().split(/\s+/)[0] || user.email?.split('@')[0] || 'Mi cuenta'
+}
+
+function Avatar({ user }) {
+  return user.photoURL ? (
+    <img
+      src={user.photoURL}
+      alt=""
+      referrerPolicy="no-referrer"
+      className="size-8 shrink-0 rounded-full border border-brand-gold object-cover"
+    />
+  ) : (
+    <MdAccountCircle className="size-8 shrink-0 text-brand-gold" aria-hidden="true" />
+  )
+}
+
+/**
+ * Cuenta de escritorio para el final del navbar: foto, primer nombre y debajo "Cerrar sesión".
+ * Sin sesión (o invitado) no muestra nada: ahí solo queda el ícono de ingresar de UserMenu.
+ */
+export function AccountBadge() {
+  const { user, isGuest, configured } = useAuth()
+  if (!configured || !user || isGuest) return null
+
+  return (
+    <div
+      className="ms-2 flex items-center gap-2 border-s border-brand-gold/40 ps-3"
+      title={user.displayName || user.email}
+    >
+      <Avatar user={user} />
+      <div className="flex min-w-0 flex-col items-start leading-tight">
+        <span className="max-w-28 truncate text-sm font-semibold text-brand-white">
+          {firstName(user)}
+        </span>
+        <button
+          type="button"
+          onClick={signOutUser}
+          className="rounded text-xs font-semibold text-brand-gold underline-offset-2 hover:underline"
+        >
+          Cerrar sesión
         </button>
-      </Tooltip>
+      </div>
     </div>
   )
 }

@@ -29,6 +29,11 @@ export function formatMeasure(value, unit, kind = 'length') {
   return round1(unit === 'in' ? cmToIn(Number(value)) : Number(value))
 }
 
+/** Tallas de una guía, en el orden de sus filas (sin espacios sobrantes ni repetidas). */
+export const chartSizes = (chart) => [
+  ...new Set((chart?.rows ?? []).map((r) => String(r.size).trim()).filter(Boolean)),
+]
+
 export const emptyChart = () => ({
   name: '',
   note: '',

@@ -378,6 +378,12 @@ export async function saveProduct(product, cost, variantCosts = {}) {
     base.baseVariantName = deleteField()
   }
 
+  if (product.sizeChartId?.trim()) {
+    base.sizeChartId = product.sizeChartId.trim()
+  } else if (!isNew) {
+    base.sizeChartId = deleteField()
+  }
+
   if (
     Array.isArray(product.sizes) &&
     product.sizes.length > 0 &&

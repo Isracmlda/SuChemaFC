@@ -4,25 +4,44 @@ import { balance, normalizeReference, totalPaid, validatePaymentForm } from '../
 
 const PREFIX = 'SCFC'
 
-/** Texto del QR: identifica el pedido y la camisa (posición dentro de `lines`). */
-export const buildQrPayload = (orderId, lineIndex) => `${PREFIX}:${orderId}:${lineIndex}`
+/** Texto del QR del recibo: identifica el pedido completo. */
+export const buildQrPayload = (orderId) => `${PREFIX}:${orderId}`
 
-/** Lee el texto de un QR. Devuelve { orderId, lineIndex } o null si no es de SuChemaFC. */
+/**
+ * Lee el texto de un QR. Devuelve { orderId, lineIndex } o null si no es de SuChemaFC. Los recibos
+ * nuevos no llevan camisa (`lineIndex: null`); los antiguos traían `:<posición>` y se siguen leyendo.
+ */
 export function parseQrPayload(text = '') {
   const m = String(text)
     .trim()
-    .match(/^SCFC:([A-Za-z0-9]{10,40}):(\d{1,2})$/)
-  return m ? { orderId: m[1], lineIndex: Number(m[2]) } : null
+    .match(/^SCFC:([A-Za-z0-9]{10,40})(?::(\d{1,2}))?$/)
+  return m ? { orderId: m[1], lineIndex: m[2] == null ? null : Number(m[2]) } : null
 }
 
 /**
+ * Guía de rastreo (128 bits en hexadecimal): es el QR de las etiquetas de cada camisa. Las
+ * etiquetas nuevas le agregan `:<posición>` de la camisa; las antiguas solo traen la guía.
+ */
+const TRACKING_CODE = /^([a-f0-9]{32})(?::(\d{1,2}))?$/i
+
+/** Texto del QR de una etiqueta: la guía de rastreo y la posición de la camisa en el pedido. */
+export const buildLabelPayload = (trackingCode, lineIndex) =>
+  lineIndex == null ? trackingCode : `${trackingCode}:${lineIndex}`
+
+/**
  * Lo que el admin puede escribir a mano: el texto del QR, el ID completo del pedido (20
- * caracteres) o su referencia corta de 8. Devuelve { orderId, lineIndex } o { ref } o null.
+ * caracteres), su referencia corta de 8 o su guía de rastreo (con la camisa si viene de una
+ * etiqueta). Devuelve { orderId, lineIndex }, { ref }, { trackingCode[, lineIndex] } o null.
  */
 export function parseScanInput(text = '') {
   const qr = parseQrPayload(text)
   if (qr) return qr
   const value = String(text).trim()
+  const label = value.match(TRACKING_CODE)
+  if (label) {
+    const trackingCode = label[1].toLowerCase()
+    return label[2] == null ? { trackingCode } : { trackingCode, lineIndex: Number(label[2]) }
+  }
   if (/^[A-Za-z0-9]{20}$/.test(value)) return { orderId: value, lineIndex: null }
   if (/^[A-Za-z0-9]{8}$/.test(value)) return { ref: value.toUpperCase() }
   return null

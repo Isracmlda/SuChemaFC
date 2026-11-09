@@ -17,6 +17,13 @@ export const SHIPPING_METHODS = {
   whatsapp: 'Entrega coordinada por WhatsApp',
 }
 
+/** Dirección de envío en una línea ("Provincia, cantón, distrito. Señas"), o '' si no hay. */
+export function formatAddress(address) {
+  if (!address) return ''
+  const place = [address.province, address.canton, address.district].filter(Boolean).join(', ')
+  return [place, address.details].filter(Boolean).join('. ')
+}
+
 export const emptyCustomer = (user) => ({
   name: user?.displayName ?? '',
   phone: '',

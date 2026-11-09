@@ -26,6 +26,8 @@ import SizeGuide from '../features/sizeChart/SizeGuide.jsx'
 import { useAsync } from '../hooks/useAsync.js'
 import { usePageMeta } from '../hooks/usePageMeta.js'
 import { useCart } from '../hooks/useCart.js'
+import { useDialog } from '../hooks/useDialog.js'
+import { useToast } from '../hooks/useToast.js'
 import { loadProduct } from '../services/storefront.js'
 import { formatCRC } from '../utils/format.js'
 import { btnPrimary, btnSecondary, cardClass } from '../utils/ui.js'
@@ -98,14 +100,18 @@ function Gallery({ images, name }) {
 
 function ShareButton({ id }) {
   const [copied, setCopied] = useState(false)
+  const dialog = useDialog()
+  const toast = useToast()
 
   async function copy() {
     const url = productUrl(window.location.origin, id)
     try {
       await navigator.clipboard.writeText(url)
     } catch {
-      window.prompt('Copia este enlace:', url)
+      await dialog.showText({ title: 'Copiar enlace', message: 'Copia este enlace:', text: url })
+      return
     }
+    toast.ok('Enlace copiado.')
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
   }
@@ -117,7 +123,7 @@ function ShareButton({ id }) {
       ) : (
         <MdShare className="size-5" aria-hidden="true" />
       )}
-      <span role="status">{copied ? 'Enlace copiado' : 'Copiar enlace'}</span>
+      <span>{copied ? 'Enlace copiado' : 'Copiar enlace'}</span>
     </button>
   )
 }
@@ -143,7 +149,7 @@ function Purchase({
   competitions,
   standardSurcharges,
 }) {
-  const [notice, setNotice] = useState(null)
+  const toast = useToast()
   const { addToCart, toggleWishlist, inWishlist } = useCart()
 
   const qty = shirts.length
@@ -186,14 +192,11 @@ function Purchase({
   function handleAdd() {
     const lines = buildShirtLines(product, shirts, infos)
     const ok = lines.map((line) => addToCart(line)).every(Boolean)
-    setNotice(
-      ok
-        ? { ok: true, text: `Agregaste ${qty} al carrito.` }
-        : {
-            ok: false,
-            text: 'El carrito está lleno (máximo 50 líneas). Quita alguna para seguir.',
-          },
-    )
+    if (ok) {
+      toast.ok(`Agregaste ${qty} al carrito.`, { action: { to: '/carrito', label: 'Ver carrito' } })
+    } else {
+      toast.error('El carrito está lleno (máximo 50 líneas). Quita alguna para seguir.')
+    }
   }
 
   return (
@@ -386,23 +389,6 @@ function Purchase({
             : 'Elige una talla para continuar.'}
         </p>
       )}
-      {notice && (
-        <p
-          role={notice.ok ? 'status' : 'alert'}
-          className={`rounded-md border p-3 text-sm ${notice.ok ? 'border-success text-success' : 'border-danger text-danger'}`}
-        >
-          <span aria-hidden="true">{notice.ok ? '✓ ' : '⚠ '}</span>
-          {notice.text}
-          {notice.ok && (
-            <>
-              {' '}
-              <Link to="/carrito" className="font-bold underline">
-                Ver carrito
-              </Link>
-            </>
-          )}
-        </p>
-      )}
     </div>
   )
 }
@@ -473,18 +459,30 @@ function ProductView({ product, catalog }) {
               )}
             </p>
             {onSale && <SaleCountdown sale={view.sale} />}
-
-            {tags.length > 0 && (
-              <p className="text-sm text-muted">{tags.map((t) => `#${t.name}`).join(' ')}</p>
-            )}
           </header>
           {product.description && <p className="whitespace-pre-line">{product.description}</p>}
+          {tags.length > 0 && (
+            <ul className="-mt-2 flex flex-wrap gap-1.5" aria-label="Hashtags de la camisa">
+              {tags.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    to={`/?hashtag=${encodeURIComponent(t.id)}`}
+                    target="_blank"
+                    rel="noopener"
+                    title={`Ver todas las camisas con #${t.name}`}
+                    className="inline-flex items-center rounded-full bg-accent-solid px-2 py-0.5 text-xs font-bold text-on-accent hover:opacity-85"
+                  >
+                    #{t.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <ShareButton id={product.id} />
             <SizeGuide
               key={viewKey}
-              charts={catalog.sizeCharts}
-              initialChartId={view.sizeChartId}
+              chart={catalog.sizeCharts.find((c) => c.id === view.sizeChartId)}
             />
           </div>
           <Purchase

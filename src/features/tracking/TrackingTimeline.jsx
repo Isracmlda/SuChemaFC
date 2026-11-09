@@ -1,5 +1,5 @@
 import { MdCheckCircle, MdErrorOutline, MdRadioButtonUnchecked, MdSchedule } from 'react-icons/md'
-import { formatDateTime } from '../../utils/dates.js'
+import { formatDate, formatDateTime } from '../../utils/dates.js'
 import { statusLabel } from '../orders/orderStatus.js'
 import { buildStages, showsEstimate, sortHistory } from './tracking.js'
 
@@ -30,8 +30,8 @@ export default function TrackingTimeline({ tracking }) {
       )}
       {showsEstimate(tracking) && (
         <p className="rounded-md border border-border bg-surface p-3 text-sm">
-          <strong>Fecha estimada:</strong> {formatDateTime(tracking.estimatedDate)}. Puede cambiar
-          si el proveedor se atrasa; te avisaremos.
+          <strong>Fecha estimada:</strong> {formatDate(tracking.estimatedDate)}. Puede cambiar si el
+          proveedor se atrasa; te avisaremos.
         </p>
       )}
 

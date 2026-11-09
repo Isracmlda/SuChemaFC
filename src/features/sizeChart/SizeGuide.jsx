@@ -45,13 +45,11 @@ export function ChartTable({ chart, unit }) {
 
 /**
  * Botón + ventana modal con la guía de tallas. Usa <dialog>, que ya maneja el foco y la tecla Esc.
- * `charts` viene del catálogo; si está vacío no muestra nada. `initialChartId` (opcional) es la categoría
- * con la que abre (la de la versión activa); si no existe, abre con la primera. Para que otra versión
- * reinicie la categoría, quien lo usa debe cambiar su `key`.
+ * `chart` es la guía asignada a la versión de la camisa que se está viendo (la elige el admin);
+ * sin guía asignada no muestra nada. Solo se ve esa guía, sin selector de otras.
  */
-export default function SizeGuide({ charts, initialChartId = '' }) {
+export default function SizeGuide({ chart }) {
   const dialogRef = useRef(null)
-  const [selectedId, setSelectedId] = useState(initialChartId ?? '')
   const [unit, setUnit] = useState('cm')
   const [open, setOpen] = useState(false)
 
@@ -62,9 +60,7 @@ export default function SizeGuide({ charts, initialChartId = '' }) {
     if (!open && dialog.open) dialog.close()
   }, [open])
 
-  if (!charts?.length) return null
-  const sorted = [...charts].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  const chart = sorted.find((c) => c.id === selectedId) ?? sorted[0]
+  if (!chart) return null
 
   return (
     <>
@@ -96,18 +92,7 @@ export default function SizeGuide({ charts, initialChartId = '' }) {
           </header>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <select
-              aria-label="Categoría"
-              value={chart.id}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-bg px-3 text-sm font-semibold text-fg hover:border-accent"
-            >
-              {sorted.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <p className="min-w-0 flex-1 font-semibold">{chart.name}</p>
             <div
               role="group"
               aria-label="Unidad"

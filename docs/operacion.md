@@ -1,4 +1,4 @@
-﻿# Guía de operación, seguridad y despliegue
+# Guía de operación, seguridad y despliegue
 
 Documento para quien administra SuChemaFC. Los pasos marcados **[Tú]** requieren tus credenciales (consola de Firebase, Google, Drive) y no se pueden hacer desde el código.
 
@@ -31,15 +31,15 @@ npm run deploy              # build + prerender + firebase deploy (hosting y reg
 
 ## 3. Flujo diario
 
-| Paso                    | Dónde                       | Qué pasa                                                                                                                                                      |
-| ----------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Compra como invitado    | Tienda → Carrito → Checkout | Sesión anónima (o Google). Se sube el comprobante SINPE a Drive y se crea `orders` + `orderTracking` en un solo lote. El cliente recibe un código de rastreo. |
-| Revisión del pago       | Admin → Pedidos             | Ver comprobante, confirmar/rechazar pago. Estados: pago pendiente → adelanto confirmado → …                                                                   |
-| Pedido al proveedor     | Admin → Proveedor           | Agrupar pedidos con adelanto confirmado, registrar fecha estimada y avances (producción, enviado, llegó). Los estados del cliente se actualizan solos.        |
-| Entrega                 | Admin → Entrega             | Escanear el QR del recibo o buscar por código; cobrar el saldo (efectivo o SINPE) y marcar entregado. Se genera el recibo PDF.                                |
-| Reseñas                 | Admin → Reseñas             | Aprobar o borrar. Solo las aprobadas son públicas.                                                                                                            |
-| Seguimiento del negocio | Admin → Resumen / Bitácora  | Ventas, costos, utilidad y toda acción de admin registrada (quién, qué, cuándo).                                                                              |
-| Respaldo                | Admin → Respaldo            | Exporta colecciones a JSON/CSV. **Hacerlo al menos una vez por semana** (el plan Spark no incluye copias automáticas).                                        |
+| Paso                    | Dónde                       | Qué pasa                                                                                                                                                                             |
+| ----------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Compra como invitado    | Tienda → Carrito → Checkout | Sesión anónima (o Google). Se sube el comprobante SINPE a Drive y se crea `orders` + `orderTracking` en un solo lote. El cliente recibe un código de rastreo.                        |
+| Revisión del pago       | Admin → Pedidos             | Ver comprobante, confirmar/rechazar pago. Estados: pago pendiente → adelanto confirmado → …                                                                                          |
+| Pedido al proveedor     | Admin → Proveedor           | Agrupar pedidos con adelanto confirmado, registrar fecha estimada y avances (producción, enviado, llegó). Los estados del cliente se actualizan solos.                               |
+| Entrega                 | Admin → Entrega             | Escanear el QR del recibo o buscar por código; cobrar el saldo (efectivo o SINPE) y marcar entregado.                                                                                |
+| Reseñas                 | Admin → Reseñas             | Aprobar o borrar. Solo las aprobadas son públicas.                                                                                                                                   |
+| Seguimiento del negocio | Admin → Resumen / Bitácora  | Ventas, costos, utilidad, ganancia por pedido al proveedor (cobrado vs. costo), compendios por mes y año, costos secundarios y toda acción de admin registrada (quién, qué, cuándo). |
+| Respaldo                | Admin → Respaldo            | Exporta colecciones a JSON/CSV. **Hacerlo al menos una vez por semana** (el plan Spark no incluye copias automáticas).                                                               |
 
 El cliente consulta su pedido con el enlace `/?pedido=CODIGO` o el código en _Rastreo_.
 
@@ -72,20 +72,20 @@ El cliente consulta su pedido con el enlace `/?pedido=CODIGO` o el código en _R
 
 Límites diarios de Firestore: **50.000 lecturas, 20.000 escrituras, 20.000 borrados**; Hosting: 10 GB almacenados y 360 MB/día de transferencia.
 
-| Pantalla / acción    | Lecturas aproximadas                                           | Medida aplicada                                                                      |
-| -------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Catálogo (visitante) | 1 por camisa visible + secciones, hashtags, parches y tallas   | Caché en memoria de 5 minutos (`services/storefront.js`)                             |
-| Detalle de camisa    | 0 si viene del catálogo; 1 + 1 de reseñas aprobadas (máx. 100) | Reutiliza la caché del catálogo                                                      |
-| Botón de WhatsApp    | 2 por carga de la app                                          | Caché de 5 minutos (`getDocDataCached`) que se limpia al guardar ajustes o contenido |
-| Ayuda                | 4 (contenido, pago, envío, general)                            | Una vez por visita a la pantalla                                                     |
-| Checkout             | ~4 + métodos de pago                                           | Una vez por visita                                                                   |
-| Mis pedidos          | hasta 100 (`MY_ORDERS_LIMIT`)                                  | Límite en la consulta                                                                |
-| Admin → Pedidos      | hasta 200                                                      | Límite y caché de 1 minuto compartida con Proveedor y Entrega (`listOrders`)         |
-| Admin → Proveedor    | hasta 200 (los pedidos salen de la caché de Pedidos)           | Límite + caché; toda escritura de admin vacía la caché                               |
-| Admin → Usuarios     | `users` + `admins` (1 lectura por documento)                   | Caché de 1 minuto; sin paginación, pensado para una tienda pequeña                   |
-| Inicio de sesión     | 1 lectura (`admins/{uid}`; 0 para el admin fijo) + 1 escritura | El perfil `users/{uid}` solo se reescribe si cambió o pasaron 24 h                   |
-| Admin → Resumen      | hasta 500 pedidos + `productPrivate`                           | Límite + periodo                                                                     |
-| Admin → Respaldo     | hasta 5.000 por colección                                      | Solo bajo demanda; evitar repetirlo el mismo día                                     |
+| Pantalla / acción    | Lecturas aproximadas                                                                                                                            | Medida aplicada                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Catálogo (visitante) | 1 por camisa visible + secciones, hashtags, parches y tallas                                                                                    | Caché en memoria de 5 minutos (`services/storefront.js`)                             |
+| Detalle de camisa    | 0 si viene del catálogo; 1 + 1 de reseñas aprobadas (máx. 100)                                                                                  | Reutiliza la caché del catálogo                                                      |
+| Botón de WhatsApp    | 2 por carga de la app                                                                                                                           | Caché de 5 minutos (`getDocDataCached`) que se limpia al guardar ajustes o contenido |
+| Ayuda                | 4 (contenido, pago, envío, general)                                                                                                             | Una vez por visita a la pantalla                                                     |
+| Checkout             | ~4 + métodos de pago                                                                                                                            | Una vez por visita                                                                   |
+| Mis pedidos          | hasta 100 (`MY_ORDERS_LIMIT`)                                                                                                                   | Límite en la consulta                                                                |
+| Admin → Pedidos      | hasta 200                                                                                                                                       | Límite y caché de 1 minuto compartida con Proveedor y Entrega (`listOrders`)         |
+| Admin → Proveedor    | hasta 200 (los pedidos salen de la caché de Pedidos)                                                                                            | Límite + caché; toda escritura de admin vacía la caché                               |
+| Admin → Usuarios     | `users` + `admins` (1 lectura por documento)                                                                                                    | Caché de 1 minuto; sin paginación, pensado para una tienda pequeña                   |
+| Inicio de sesión     | 1 lectura (`admins/{uid}`; 0 para el admin fijo) + 1 escritura                                                                                  | El perfil `users/{uid}` solo se reescribe si cambió o pasaron 24 h                   |
+| Admin → Resumen      | hasta 500 pedidos + `productPrivate` + hasta 200 pedidos a proveedor, 500 costos secundarios y los pedidos de clientes que no estén en la caché | Límite + periodo; las finanzas reutilizan la caché de Pedidos                        |
+| Admin → Respaldo     | hasta 5.000 por colección                                                                                                                       | Solo bajo demanda; evitar repetirlo el mismo día                                     |
 
 Estimación: con 100 visitas diarias al catálogo (~40 camisas) se gastan ~5.000 lecturas, 10 % del límite. El punto a vigilar es el **Respaldo** y el **Resumen** con mucho historial: úsalos una o dos veces al día como máximo. Las lecturas del admin cuentan igual que las del público. Revisa el uso en Firebase → Firestore → Uso.
 
@@ -99,15 +99,17 @@ Hacerlo con una camisa de prueba y un pedido real pequeño:
 4. Rastreo con el código: debe verse "pago pendiente de revisión".
 5. Admin → Pedidos: abrir el comprobante, confirmar adelanto. El rastreo cambia.
 6. Admin → Proveedor: crear pedido al proveedor, marcar enviado y "llegó". El rastreo cambia a "listo para entrega".
-7. Admin → Entrega: escanear el QR (o código), cobrar saldo, marcar entregado. Descargar el recibo.
+7. Admin → Entrega: escanear el QR (o código), cobrar saldo, marcar entregado.
 8. Cliente con Google: dejar una reseña con foto; el admin la aprueba y aparece en la camisa.
 9. Admin → Resumen: la venta aparece; Admin → Bitácora: todas las acciones están registradas; Respaldo: exportar.
 
 ## 7. Limitaciones conocidas
 
 - Drive y Firestore reales **no se han probado** desde el código; las pruebas automáticas usan el emulador de Firestore y funciones puras.
-- El PDF del recibo solo admite caracteres Latin-1 (tildes y ñ sí; emojis no).
+- El recibo (Admin → Pedidos, tras confirmar el pago) es una imagen PNG de 384 px para impresora térmica de 57 mm, con un solo QR por pedido. Se imprime con PuraPrint (`https://crpuraprint.web.app`), que debe estar desplegado con la fuente `suchema`; la impresión Bluetooth real no se ha probado.
 - El escáner de QR con cámara no se probó en un dispositivo real; se puede ingresar el código a mano.
 - El Open Graph por camisa depende de ejecutar `npm run prerender` en cada despliegue.
 - En móvil con red lenta simulada, el LCP es ~5 s por el `iframe.js` de Firebase Auth (rendimiento 100 sin simulación; accesibilidad, buenas prácticas y SEO en 100).
 - Con ruta única (`MemoryRouter`) el botón Atrás del navegador sale de la app.
+- Los avisos de resultado (éxito/error) salen como toast arriba a la derecha, bajo el navbar (`useToast`, o `<Notice>` que los dispara), y las confirmaciones usan modals de la app (`useDialog().confirm`, `showText`) en lugar de `window.confirm`/`window.prompt`. Esto no se probó en un navegador.
+

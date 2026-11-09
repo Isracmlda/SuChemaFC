@@ -1,4 +1,5 @@
 import { SIZES } from '../../../utils/constants.js'
+import { chartSizes } from '../../sizeChart/chart.js'
 
 /** Genera un identificador único y estable para una nueva versión. */
 export function makeVariantId() {
@@ -56,6 +57,49 @@ export function validateSizes(sizes, label = 'Tallas') {
       return `${label}: contiene la talla duplicada «${s}».`
     }
     seen.add(key)
+  }
+  return null
+}
+
+/**
+ * Tallas a guardar cuando hay una guía asignada: solo las que existen en la guía (en su orden). Sin
+ * selección propia, o si ya ninguna coincide (la guía cambió), se ofrecen todas las de la guía.
+ * Sin guía devuelve las tallas tal cual.
+ */
+function sizesForChart(sizes, chart) {
+  const allowed = chartSizes(chart)
+  if (!chart || allowed.length === 0) return sizes
+  const kept = Array.isArray(sizes) ? allowed.filter((s) => sizes.includes(s)) : []
+  return kept.length > 0 ? kept : allowed
+}
+
+/**
+ * Ajusta las tallas de la camisa base y de cada versión a la guía que tienen asignada (la propia de
+ * la versión, o la de la camisa base si no define una). Así lo guardado coincide siempre con la guía.
+ * @param {object} product camisa con `sizeChartId?`, `sizes?` y `variants?`
+ * @param {Array} charts guías de tallas disponibles
+ */
+export function applyChartSizes(product, charts = []) {
+  const byId = new Map(charts.map((c) => [c.id, c]))
+  const baseChart = byId.get(product.sizeChartId)
+  const next = { ...product, sizes: sizesForChart(product.sizes, baseChart) }
+  if (Array.isArray(product.variants)) {
+    next.variants = product.variants.map((v) => {
+      const chart = byId.get(v.sizeChartId ?? product.sizeChartId)
+      return chart ? { ...v, sizes: sizesForChart(v.sizes, chart) } : v
+    })
+  }
+  return next
+}
+
+/**
+ * Valida la guía de tallas elegida para la camisa base. Sin guía es válido; con guía, debe existir
+ * (si ya hay guías cargadas) para no dejar la camisa apuntando a una guía borrada.
+ */
+export function validateChartId(sizeChartId, sizeChartIds = [], label = 'Camisa base') {
+  const id = String(sizeChartId ?? '').trim()
+  if (id && sizeChartIds.length > 0 && !sizeChartIds.includes(id)) {
+    return `${label}: la guía de tallas seleccionada no existe.`
   }
   return null
 }

@@ -5,6 +5,7 @@ import { listOrdersSince, loadCostData } from '../../../services/reports.js'
 import { formatCRC } from '../../../utils/format.js'
 import { btnSecondary, cardClass } from '../../../utils/ui.js'
 import { ORDER_STATUS } from '../../orders/orderStatus.js'
+import FinanceSection from '../finance/FinanceSection.jsx'
 import { MAX_ORDERS, PERIODS, countStatuses, periodStart, summarize } from './stats.js'
 
 function Stat({ label, value, hint }) {
@@ -168,6 +169,7 @@ export default function DashboardPage() {
         ))}
       </div>
       <Report key={period} period={period} />
+      <FinanceSection />
     </section>
   )
 }

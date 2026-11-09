@@ -2,9 +2,9 @@ import { useCallback, useState } from 'react'
 import { MdCheckBox, MdCheckBoxOutlineBlank, MdLocalShipping, MdSearch } from 'react-icons/md'
 import Field from '../../../components/Field.jsx'
 import StatusBadge from '../../../components/StatusBadge.jsx'
-import { Notice } from '../../../components/States.jsx'
+import { InlineNotice, Notice } from '../../../components/States.jsx'
 import { listOrders } from '../../../services/adminOrders.js'
-import { deliverOrder, fetchOrder } from '../../../services/delivery.js'
+import { deliverOrder, fetchOrder, fetchOrderByTracking } from '../../../services/delivery.js'
 import { errorMessage } from '../../../utils/errors.js'
 import { formatCRC } from '../../../utils/format.js'
 import { btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
@@ -28,28 +28,36 @@ async function findOrder(input) {
       'Ese código no es de SuChemaFC. Escanea el QR del recibo o escribe la referencia.',
     )
   // La referencia son los 8 primeros caracteres del ID en mayúsculas: se busca entre los recientes.
-  const order = parsed.orderId
-    ? await fetchOrder(parsed.orderId)
-    : ((await listOrders()).find((o) => orderRef(o.id) === parsed.ref) ?? null)
+  let order
+  if (parsed.trackingCode) order = await fetchOrderByTracking(parsed.trackingCode)
+  else if (parsed.orderId) order = await fetchOrder(parsed.orderId)
+  else order = (await listOrders()).find((o) => orderRef(o.id) === parsed.ref) ?? null
   if (!order) throw new Error('No se encontró ese pedido.')
   const lineIndex =
     parsed.lineIndex != null && parsed.lineIndex < order.lines.length ? parsed.lineIndex : null
   return { order, lineIndex }
 }
 
-function DeliveryForm({ order, scannedLine, onDone }) {
-  const [checked, setChecked] = useState(scannedLine == null ? [] : [scannedLine])
+/**
+ * `scanned` son las camisas (posiciones) escaneadas con sus etiquetas: quedan verificadas solas.
+ * El admin puede marcar o desmarcar cualquiera a mano (`flipped` guarda esos cambios).
+ */
+function DeliveryForm({ order, scanned, onDone }) {
+  const [flipped, setFlipped] = useState([])
   const [method, setMethod] = useState('efectivo')
   const [reference, setReference] = useState('')
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
 
+  const checked = order.lines
+    .map((_, i) => i)
+    .filter((i) => scanned.includes(i) !== flipped.includes(i))
   const pending = balance(order)
   const blocked = deliveryBlock(order)
   const warning = deliveryWarning(order)
   const problem = validateDelivery(order, { checked, method, amount: pending, reference })
 
-  const toggle = (i) => setChecked((c) => (c.includes(i) ? c.filter((x) => x !== i) : [...c, i]))
+  const toggle = (i) => setFlipped((f) => (f.includes(i) ? f.filter((x) => x !== i) : [...f, i]))
 
   async function submit(event) {
     event.preventDefault()
@@ -73,11 +81,17 @@ function DeliveryForm({ order, scannedLine, onDone }) {
       <p className="text-sm">
         {order.customer?.name} · {order.customer?.phone} · {SHIPPING_METHODS[order.shippingMethod]}
       </p>
-      {blocked && <Notice notice={{ type: 'error', text: blocked }} />}
+      {blocked && <InlineNotice notice={{ type: 'error', text: blocked }} />}
       {!blocked && warning && <p className="text-sm text-muted">⚠ {warning}</p>}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 font-bold">Verifica cada camisa antes de entregar</legend>
+        {scanned.length > 0 && (
+          <p className="text-sm text-muted">
+            Etiquetas escaneadas: {scanned.length} de {order.lines.length}. Escanea las demás o
+            márcalas a mano.
+          </p>
+        )}
         {order.lines.map((l, i) => {
           const on = checked.includes(i)
           const Icon = on ? MdCheckBox : MdCheckBoxOutlineBlank
@@ -90,7 +104,7 @@ function DeliveryForm({ order, scannedLine, onDone }) {
               disabled={Boolean(blocked)}
               onClick={() => toggle(i)}
               className={`${cardClass} flex min-h-11 items-center gap-3 text-start disabled:opacity-60 ${
-                i === scannedLine ? 'border-accent' : ''
+                scanned.includes(i) ? 'border-accent' : ''
               }`}
             >
               <Icon className="size-6 shrink-0 text-accent" aria-hidden="true" />
@@ -108,7 +122,9 @@ function DeliveryForm({ order, scannedLine, onDone }) {
                     Personalizada: {describeCustom(l.custom)}
                   </span>
                 )}
-                {i === scannedLine && <span className="block text-sm text-accent">Escaneada</span>}
+                {scanned.includes(i) && (
+                  <span className="block text-sm text-accent">Escaneada</span>
+                )}
               </span>
             </button>
           )
@@ -179,12 +195,18 @@ export default function DeliveryPage() {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(null)
 
+  // Si se escanea otra etiqueta del mismo pedido, se suma a las camisas ya escaneadas.
   const lookup = useCallback(async (input) => {
     setBusy(true)
     setError('')
     setDone(null)
     try {
-      setFound(await findOrder(input))
+      const next = await findOrder(input)
+      setFound((prev) => {
+        const before = prev?.order.id === next.order.id ? prev.scanned : []
+        const add = next.lineIndex == null ? [] : [next.lineIndex]
+        return { order: next.order, scanned: [...new Set([...before, ...add])] }
+      })
     } catch (e) {
       setFound(null)
       setError(errorMessage(e))
@@ -208,7 +230,7 @@ export default function DeliveryPage() {
         <form onSubmit={submitManual} className="flex flex-wrap items-end gap-2">
           <Field
             label="O escribe el código"
-            hint="El texto del QR, el ID del pedido o su referencia de 8 caracteres."
+            hint="El texto del QR, la guía de rastreo, el ID del pedido o su referencia de 8 caracteres."
             className="min-w-60 flex-1"
           >
             <input
@@ -237,7 +259,7 @@ export default function DeliveryPage() {
         <DeliveryForm
           key={found.order.id}
           order={found.order}
-          scannedLine={found.lineIndex}
+          scanned={found.scanned}
           onDone={() => {
             setDone(`Pedido ${orderRef(found.order.id)} entregado.`)
             setFound(null)

@@ -3,9 +3,11 @@ import { MdAdd, MdDelete, MdEdit, MdRestore, MdVisibility, MdVisibilityOff } fro
 import { useSearchParams } from 'react-router-dom'
 import DriveImage from '../../../components/DriveImage.jsx'
 import Field from '../../../components/Field.jsx'
+import FilterPanel from '../../../components/FilterPanel.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { errorMessage } from '../../../utils/errors.js'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { bulkUpdateProducts } from '../../../services/catalog.js'
 import { listCollection } from '../../../services/db.js'
 import { formatCRC, normalizeText } from '../../../utils/format.js'
@@ -22,6 +24,9 @@ const loadProducts = async () => {
   return { products, sections }
 }
 
+// Acciones masivas: en móvil iguales, sin relleno lateral grande y con el texto justo.
+const bulkBtn = `${btnSecondary} max-sm:flex-1 max-sm:gap-1 max-sm:px-2! max-sm:text-xs!`
+
 const STATUS = [
   { value: 'activas', label: 'Activas' },
   { value: 'visibles', label: 'Visibles' },
@@ -30,6 +35,7 @@ const STATUS = [
 ]
 
 export default function ProductsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(loadProducts)
   const [params] = useSearchParams()
   // undefined = lista; null = nueva; string = id. `?nueva=1` (botón de Inicio) abre el formulario.
@@ -93,11 +99,15 @@ export default function ProductsPage() {
     }
   }
 
-  function confirmDelete(products) {
+  async function confirmDelete(products) {
     const what = products.length === 1 ? `"${products[0].name}"` : `${products.length} camisas`
-    if (window.confirm(`¿Eliminar ${what}? Podrás restaurarla desde el filtro "Eliminadas".`)) {
-      bulk(products, { deleted: true, visible: false }, 'eliminar', 'Eliminada(s).')
-    }
+    const sure = await dialog.confirm({
+      title: 'Eliminar camisas',
+      message: `¿Eliminar ${what}? Podrás restaurarla desde el filtro "Eliminadas".`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (sure) bulk(products, { deleted: true, visible: false }, 'eliminar', 'Eliminada(s).')
   }
 
   const sectionName = (id) => data.sections.find((s) => s.id === id)?.name
@@ -109,16 +119,26 @@ export default function ProductsPage() {
         Nueva camisa
       </button>
 
-      <div className={`${cardClass} grid gap-3 sm:grid-cols-3`}>
-        <Field label="Buscar">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nombre de la camisa"
-            className={inputClass}
-          />
-        </Field>
+      <FilterPanel
+        active={Boolean(search) || status !== 'activas' || Boolean(sectionId)}
+        onClear={() => {
+          setSearch('')
+          setStatus('activas')
+          setSectionId('')
+          setSelected([])
+        }}
+        search={
+          <Field label="Buscar">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Nombre de la camisa"
+              className={inputClass}
+            />
+          </Field>
+        }
+      >
         <Field label="Estado">
           <select
             value={status}
@@ -144,7 +164,7 @@ export default function ProductsPage() {
             rootLabel="Todas"
           />
         </div>
-      </div>
+      </FilterPanel>
 
       <Notice notice={notice} />
 
@@ -162,47 +182,50 @@ export default function ProductsPage() {
           {chosen.length > 0 && (
             <>
               <span className="text-sm text-muted">{chosen.length} seleccionada(s):</span>
-              {status === 'eliminadas' ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => bulk(chosen, { deleted: false }, 'restaurar', 'Restaurada(s).')}
-                  className={btnSecondary}
-                >
-                  <MdRestore className="size-5" aria-hidden="true" />
-                  Restaurar
-                </button>
-              ) : (
-                <>
+              {/* En móvil los botones ocupan su propia fila y se reparten el ancho. */}
+              <div className="flex w-full gap-2 sm:w-auto">
+                {status === 'eliminadas' ? (
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => bulk(chosen, { visible: true }, 'mostrar', 'Ahora visibles.')}
-                    className={btnSecondary}
+                    onClick={() => bulk(chosen, { deleted: false }, 'restaurar', 'Restaurada(s).')}
+                    className={bulkBtn}
                   >
-                    <MdVisibility className="size-5" aria-hidden="true" />
-                    Mostrar
+                    <MdRestore className="size-5" aria-hidden="true" />
+                    Restaurar
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => bulk(chosen, { visible: false }, 'ocultar', 'Ahora ocultas.')}
-                    className={btnSecondary}
-                  >
-                    <MdVisibilityOff className="size-5" aria-hidden="true" />
-                    Ocultar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => confirmDelete(chosen)}
-                    className={btnSecondary}
-                  >
-                    <MdDelete className="size-5" aria-hidden="true" />
-                    Eliminar
-                  </button>
-                </>
-              )}
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => bulk(chosen, { visible: true }, 'mostrar', 'Ahora visibles.')}
+                      className={bulkBtn}
+                    >
+                      <MdVisibility className="size-5" aria-hidden="true" />
+                      Mostrar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => bulk(chosen, { visible: false }, 'ocultar', 'Ahora ocultas.')}
+                      className={bulkBtn}
+                    >
+                      <MdVisibilityOff className="size-5" aria-hidden="true" />
+                      Ocultar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => confirmDelete(chosen)}
+                      className={bulkBtn}
+                    >
+                      <MdDelete className="size-5" aria-hidden="true" />
+                      Eliminar
+                    </button>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>

@@ -45,16 +45,28 @@ export function buildHaystack(product, tagsById) {
   return normalizeText([product.name, product.description, ...tagText].join(' '))
 }
 
+/** Nombres y alias de los hashtags de la camisa, normalizados y sin espacios ("La Liga" → "laliga"). */
+function tagKeys(product, tagsById) {
+  return (product.tagIds ?? [])
+    .map((id) => tagsById.get(id))
+    .filter(Boolean)
+    .flatMap((t) => [t.name, ...(t.aliases ?? [])])
+    .map((n) => normalizeText(n).replace(/\s+/g, ''))
+}
+
 /**
  * Filtra camisas. filters: { query, sectionIds: Set|null, tagId, min, max }.
- * Todas las palabras de la búsqueda deben aparecer en el texto de la camisa. El rango de precio
- * usa el precio mínimo vigente entre la versión base y las versiones visibles.
+ * Todas las palabras de la búsqueda deben aparecer en el texto de la camisa. Una palabra que empieza
+ * con # ("#LaLiga") se busca solo entre los hashtags de la camisa. El rango de precio usa el precio
+ * mínimo vigente entre la versión base y las versiones visibles.
  */
 export function filterProducts(products, filters, tags, now = Date.now()) {
   const tagsById = new Map(tags.map((t) => [t.id, t]))
-  const tokens = normalizeText(filters.query ?? '')
+  const allTokens = normalizeText(filters.query ?? '')
     .split(/\s+/)
     .filter(Boolean)
+  const hashtagTokens = allTokens.filter((t) => t.startsWith('#')).map((t) => t.replace(/^#+/, ''))
+  const tokens = allTokens.filter((t) => !t.startsWith('#'))
 
   return products.filter((p) => {
     if (filters.sectionIds && !p.sectionIds?.some((id) => filters.sectionIds.has(id))) return false
@@ -62,6 +74,10 @@ export function filterProducts(products, filters, tags, now = Date.now()) {
     const price = minVariantPrice(p, now)
     if (filters.min && price < filters.min) return false
     if (filters.max && price > filters.max) return false
+    if (hashtagTokens.some(Boolean)) {
+      const keys = tagKeys(p, tagsById)
+      if (!hashtagTokens.every((t) => !t || keys.some((k) => k.includes(t)))) return false
+    }
     if (tokens.length) {
       const haystack = buildHaystack(p, tagsById)
       if (!tokens.every((t) => haystack.includes(t))) return false

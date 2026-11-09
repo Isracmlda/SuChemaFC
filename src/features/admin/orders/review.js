@@ -4,6 +4,9 @@ import { FINAL_STATUSES } from '../../orders/orderStatus.js'
 
 const REFERENCE = /^[A-Z0-9-]{4,40}$/
 
+/** Estados en los que el adelanto todavía no está confirmado: el pago se está revisando. */
+const AWAITING_REVIEW = ['pago_pendiente_revision', 'pago_rechazado']
+
 /** Número de comprobante en mayúsculas y sin espacios ni guiones raros (es el ID de `paymentRefs`). */
 export const normalizeReference = (text = '') =>
   String(text)
@@ -43,8 +46,7 @@ export function applyPayment(order, { reference, amount }, at) {
   const ref = normalizeReference(reference)
   const payments = [...(order.payments ?? []), { amount, ref, at }]
   const paidAmount = totalPaid({ payments })
-  const waiting = ['pago_pendiente_revision', 'pago_rechazado'].includes(order.status)
-  const confirms = waiting && paidAmount >= order.advanceRequired
+  const confirms = AWAITING_REVIEW.includes(order.status) && paidAmount >= order.advanceRequired
   return {
     ref,
     payments,
@@ -59,8 +61,12 @@ export const timelineEntry = (status, at, note = '') => ({ status, at, note: not
 
 export const canCancel = (order) => !order.deleted && !FINAL_STATUSES.includes(order.status)
 export const canReject = (order) => order.status === 'pago_pendiente_revision'
+/** "Comprobar pago" solo mientras el adelanto no se confirma; después el saldo se cobra al entregar. */
 export const canConfirmPayment = (order) =>
-  !order.deleted && !['cancelado', 'entregado'].includes(order.status) && balance(order) > 0
+  !order.deleted && AWAITING_REVIEW.includes(order.status) && balance(order) > 0
+/** El recibo se emite una vez que el pago se comprobó y el pedido quedó confirmado. */
+export const canIssueReceipt = (order) =>
+  !order.deleted && order.status !== 'cancelado' && !AWAITING_REVIEW.includes(order.status)
 
 /** Filtra por estado (`all` = todos menos cancelados) y por texto (referencia, nombre o teléfono). */
 export function filterOrders(orders, { status = 'all', query = '' } = {}) {

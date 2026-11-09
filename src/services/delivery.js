@@ -10,6 +10,12 @@ import { findPaymentRef } from './adminOrders.js'
 /** Lee un pedido por ID completo. Devuelve null si no existe. */
 export const fetchOrder = (orderId) => getDocData('orders', orderId)
 
+/** Lee un pedido por su guía de rastreo (el QR de las etiquetas). Devuelve null si no existe. */
+export async function fetchOrderByTracking(trackingCode) {
+  const tracking = await getDocData('orderTracking', trackingCode)
+  return tracking?.orderId ? fetchOrder(tracking.orderId) : null
+}
+
 /**
  * Marca el pedido como entregado y, si había saldo, registra su cobro. Todo en UN lote con
  * bitácora: pedido, pago, número de comprobante (solo SINPE), rastreo público y auditoría.

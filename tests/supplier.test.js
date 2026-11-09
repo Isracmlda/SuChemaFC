@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { formatAddress } from '../src/features/checkout/checkout.js'
 import {
   assignedLines,
   buildCsv,
+  buildLabels,
   buildSupplierOrder,
   csvCell,
   customerNotices,
@@ -14,6 +16,7 @@ import {
   orderStatusAfterRemoval,
   orderStatusFor,
   pendingLines,
+  supplierSummary,
   validateSupplierForm,
 } from '../src/features/admin/supplier/supplier.js'
 
@@ -247,5 +250,96 @@ describe('avisos por WhatsApp', () => {
     expect(text).toContain('enviado')
     expect(text).toContain('puede cambiar')
     expect(text).toContain('https://x.test/?pedido=')
+  })
+})
+
+describe('costos de importación y ganancia', () => {
+  const lines = pendingLines(orders, []).map((l) => ({ ...l, unitCost: 8000 }))
+  const base = { supplier: 'Kitmm', notes: '', estimatedDate: null, lines }
+
+  it('valida que la importación sea un entero no negativo', () => {
+    expect(validateSupplierForm({ ...base, importCost: -5 })).toMatch(/importación/)
+    expect(validateSupplierForm({ ...base, importCost: 1.5 })).toMatch(/importación/)
+    expect(validateSupplierForm({ ...base, importCost: 4000 })).toBe('')
+  })
+
+  it('reparte la importación en partes iguales y calcula la ganancia', () => {
+    const so = buildSupplierOrder({ ...base, importCost: 4000 }) // 4 camisas
+    expect(so.importCost).toBe(4000)
+    expect(supplierSummary(so)).toMatchObject({
+      units: 4,
+      productCost: 32000,
+      importPerUnit: 1000,
+      totalCost: 36000,
+      revenue: 80000,
+      profit: 44000,
+    })
+  })
+
+  it('un pedido antiguo sin precio de venta no muestra ganancia', () => {
+    const old = { totalCost: 100, items: [{ qty: 2, unitCost: 50 }] }
+    expect(supplierSummary(old)).toMatchObject({ importCost: 0, revenue: null, profit: null })
+  })
+})
+
+describe('etiquetas de entrega', () => {
+  const lines = pendingLines(orders, []).map((l) => ({ ...l, unitCost: 8000 }))
+  const so = buildSupplierOrder({ supplier: 'Kitmm', notes: '', estimatedDate: null, lines })
+
+  it('crea una etiqueta por camisa con la guía de rastreo como QR', () => {
+    const { labels, missing } = buildLabels(so, orders)
+    expect(missing).toBe(0)
+    expect(labels).toHaveLength(4)
+    expect(labels[0]).toMatchObject({
+      qrPayload: `${orders[0].trackingCode}:0`,
+      size: 'M',
+      copies: 1,
+    })
+    expect(labels.filter((l) => l.shirt === 'Barca').map((l) => l.copy)).toEqual([1, 2])
+  })
+
+  it('omite camisas de pedidos que ya no existen o fueron cancelados', () => {
+    const { labels, missing } = buildLabels(so, [orders[0], { ...orders[1], status: 'cancelado' }])
+    expect(labels).toHaveLength(3)
+    expect(missing).toBe(1)
+  })
+
+  it('lista los parches y pone la dirección solo en envíos por Correos', () => {
+    const address = {
+      province: 'San José',
+      canton: 'Escazú',
+      district: 'San Rafael',
+      details: '200 m norte',
+    }
+    const withPatches = [
+      order(
+        'EEEE5555',
+        [line('Real', 'M', 1, { patches: [{ name: 'Champions' }, { name: 'Ambilight' }] })],
+        {
+          shippingMethod: 'correos',
+          customer: { name: 'Ana', phone: '88888888', address },
+        },
+      ),
+      order('FFFF6666', [line('Real', 'L')], {
+        shippingMethod: 'whatsapp',
+        customer: { name: 'Beto', phone: '88888888', address },
+      }),
+    ]
+    const lines2 = pendingLines(withPatches, []).map((l) => ({ ...l, unitCost: 8000 }))
+    const so2 = buildSupplierOrder({
+      supplier: 'Kitmm',
+      notes: '',
+      estimatedDate: null,
+      lines: lines2,
+    })
+    const { labels } = buildLabels(so2, withPatches)
+    expect(labels[0].patches).toEqual(['Champions', 'Ambilight'])
+    expect(labels[0].address).toBe('San José, Escazú, San Rafael. 200 m norte')
+    expect(labels[1].address).toBe('')
+  })
+
+  it('formatAddress tolera datos faltantes', () => {
+    expect(formatAddress(undefined)).toBe('')
+    expect(formatAddress({ province: 'Heredia', details: 'Casa azul' })).toBe('Heredia. Casa azul')
   })
 })

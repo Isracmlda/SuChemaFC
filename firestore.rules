@@ -266,6 +266,23 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Recibos para imprimir con PuraPrint: el admin deja la imagen y PuraPrint (sin sesión) la lee
+    // por su ID, que no es adivinable. Sin listado. Se borran al eliminar el pedido.
+    match /printJobs/{jobId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['image', 'title', 'orderId', 'createdAt'])
+        && request.resource.data.keys().hasAll(['image', 'title', 'createdAt'])
+        && request.resource.data.image is string
+        && request.resource.data.image.size() <= 400000
+        && request.resource.data.image.matches('^data:image/png;base64,.*')
+        && isStr(request.resource.data.title, 100)
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     // ---------- Rastreo público ----------
 
     function validTrackingCreate(code) {
@@ -303,6 +320,19 @@ service cloud.firestore {
 
     match /supplierOrders/{id} {
       allow read, write: if isAdmin();
+    }
+
+    // Costos secundarios (insumos: papel de la impresora, bolsas, etc.). Se crean y se borran.
+    match /expenses/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['description', 'amount', 'date', 'createdAt'])
+        && request.resource.data.keys().hasAll(['description', 'amount', 'date', 'createdAt'])
+        && isNonEmptyStr(request.resource.data.description, 100)
+        && isMoney(request.resource.data.amount) && request.resource.data.amount > 0
+        && request.resource.data.date is timestamp
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
     }
 
     match /paymentRefs/{numero} {

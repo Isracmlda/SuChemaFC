@@ -1,6 +1,7 @@
 import {
   MdCategory,
   MdConfirmationNumber,
+  MdCheckroom,
   MdArticle,
   MdBackup,
   MdDashboard,
@@ -19,8 +20,8 @@ import {
 } from 'react-icons/md'
 
 /**
- * Menú de administración agrupado por tarea. Las camisas ya no están aquí: se agregan y
- * administran desde Inicio (botones solo para admins); su ruta `/admin/productos` sigue activa.
+ * Menú de administración agrupado por tarea. Las camisas también se agregan y administran
+ * desde Inicio (botones solo para admins); aquí se accede a `/admin/productos` desde Catálogo.
  */
 export const ADMIN_GROUPS = [
   {
@@ -35,6 +36,7 @@ export const ADMIN_GROUPS = [
   {
     title: 'Catálogo',
     items: [
+      { to: '/admin/productos', label: 'Camisas', icon: MdCheckroom },
       { to: '/admin/secciones', label: 'Secciones', icon: MdCategory },
       { to: '/admin/parches', label: 'Parches', icon: MdWorkspacePremium },
       { to: '/admin/competiciones', label: 'Competiciones', icon: MdEmojiEvents },

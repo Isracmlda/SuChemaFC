@@ -3,6 +3,7 @@ import { MdAdd, MdDelete, MdEdit, MdVisibility, MdVisibilityOff } from 'react-ic
 import Field from '../../../components/Field.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import {
   deletePaymentMethod,
   loadCheckoutSettings,
@@ -220,6 +221,7 @@ function MethodForm({ initial, onCancel, onSave, busy }) {
 }
 
 export default function StoreSettingsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(load)
   const [editing, setEditing] = useState(null)
   const [notice, setNotice] = useState(null)
@@ -330,10 +332,15 @@ export default function StoreSettingsPage() {
                   aria-label={`Eliminar el método de ${m.holder}`}
                   title="Eliminar"
                   disabled={busy}
-                  onClick={() =>
-                    window.confirm('¿Eliminar este método de pago?') &&
-                    act(() => deletePaymentMethod(m), 'Método eliminado.')
-                  }
+                  onClick={async () => {
+                    const sure = await dialog.confirm({
+                      title: 'Eliminar método de pago',
+                      message: '¿Eliminar este método de pago?',
+                      confirmLabel: 'Eliminar',
+                      danger: true,
+                    })
+                    if (sure) act(() => deletePaymentMethod(m), 'Método eliminado.')
+                  }}
                   className={btnIcon}
                 >
                   <MdDelete className="size-5" aria-hidden="true" />

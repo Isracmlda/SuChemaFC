@@ -4,6 +4,7 @@ import Field from '../../../components/Field.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { errorMessage } from '../../../utils/errors.js'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { deleteCompetition, saveCompetition } from '../../../services/catalog.js'
 import { listCollection } from '../../../services/db.js'
 import { normalizeText } from '../../../utils/format.js'
@@ -17,6 +18,7 @@ const loadCompetitions = () => listCollection('competitions')
  * el estilo del nombre y número; cada camisa marca cuáles ofrece.
  */
 export default function CompetitionsPage() {
+  const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(loadCompetitions)
   const [name, setName] = useState('')
   const [editing, setEditing] = useState(null) // { id, name }
@@ -69,9 +71,14 @@ export default function CompetitionsPage() {
     if (done) setEditing(null)
   }
 
-  function handleDelete(competition) {
-    if (!window.confirm(`¿Eliminar la competición "${competition.name}"?`)) return
-    run(() => deleteCompetition(competition), 'Competición eliminada.')
+  async function handleDelete(competition) {
+    const sure = await dialog.confirm({
+      title: 'Eliminar competición',
+      message: `¿Eliminar la competición "${competition.name}"?`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (sure) run(() => deleteCompetition(competition), 'Competición eliminada.')
   }
 
   return (

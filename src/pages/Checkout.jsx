@@ -28,7 +28,7 @@ import { loadCheckoutSettings, placeOrder } from '../services/orders.js'
 import { loadCatalog } from '../services/storefront.js'
 import { errorMessage } from '../utils/errors.js'
 import { formatCRC } from '../utils/format.js'
-import { btnPrimary, btnSecondary, cardClass, inputClass } from '../utils/ui.js'
+import { actionRowClass, btnPrimary, btnSecondary, cardClass, inputClass } from '../utils/ui.js'
 
 const load = async () => {
   const [catalog, settings] = await Promise.all([loadCatalog(), loadCheckoutSettings()])
@@ -443,9 +443,6 @@ export default function Checkout() {
             </span>
           )}
           {tried && <FieldError text={receiptError} />}
-          <span className="text-muted">
-            Se guarda en una carpeta privada y solo la revisa el equipo de la tienda.
-          </span>
         </div>
       </section>
 
@@ -457,7 +454,7 @@ export default function Checkout() {
         </ul>
       )}
       <Notice notice={notice} />
-      <div className="flex flex-wrap gap-2">
+      <div className={actionRowClass}>
         <button type="submit" disabled={busy} className={btnPrimary}>
           {busy ? 'Enviando tu pedido…' : 'Confirmar pedido'}
         </button>

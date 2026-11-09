@@ -101,6 +101,14 @@ describe('búsqueda y filtros', () => {
     expect(ids(filterProducts(products, { query: 'MESSI' }, tags, NOW))).toEqual(['a'])
   })
 
+  it('busca con # solo entre los hashtags de la camisa', () => {
+    expect(ids(filterProducts(products, { query: '#LaLiga' }, tags, NOW))).toEqual(['b', 'c'])
+    expect(ids(filterProducts(products, { query: '#messi' }, tags, NOW))).toEqual(['a'])
+    expect(ids(filterProducts(products, { query: '#inexistente' }, tags, NOW))).toEqual([])
+    // un # suelto no filtra nada
+    expect(ids(filterProducts(products, { query: '#' }, tags, NOW))).toEqual(['a', 'b', 'c'])
+  })
+
   it('ignora acentos y exige todas las palabras', () => {
     expect(ids(filterProducts(products, { query: 'camiseta azulgrana' }, tags, NOW))).toEqual(['b'])
     expect(ids(filterProducts(products, { query: 'barcelona madrid' }, tags, NOW))).toEqual([])

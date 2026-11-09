@@ -17,6 +17,14 @@ export function fromInputValue(text) {
   return Number.isFinite(ms) ? ms : null
 }
 
+/** Valor para <input type="date"> (AAAA-MM-DD, día local) a partir de milisegundos. */
+export const toDayValue = (ms) => toInputValue(ms).slice(0, 10)
+
+/** Milisegundos desde un <input type="date">; se fija a las 12:00 para no cambiar de día por zona horaria. */
+export const fromDayValue = (day) => (day ? fromInputValue(`${day}T12:00`) : null)
+
 const DATE_TIME = new Intl.DateTimeFormat('es-CR', { dateStyle: 'medium', timeStyle: 'short' })
+const DATE_ONLY = new Intl.DateTimeFormat('es-CR', { dateStyle: 'medium' })
 
 export const formatDateTime = (ms) => (ms == null ? '' : DATE_TIME.format(ms))
+export const formatDate = (ms) => (ms == null ? '' : DATE_ONLY.format(ms))

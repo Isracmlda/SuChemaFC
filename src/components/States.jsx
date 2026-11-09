@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useToast } from '../hooks/useToast.js'
 import { errorMessage } from '../utils/errors.js'
 
 export function Loading({ label = 'Cargando…' }) {
@@ -36,8 +38,23 @@ export function ErrorState({ error, onRetry }) {
   )
 }
 
-/** Aviso de resultado de una acción (éxito o error). */
+/**
+ * Aviso de resultado de una acción (éxito o error). No dibuja nada en su lugar: lo muestra como
+ * toast (esquina superior derecha, bajo el navbar). Se avisa una vez por cada texto nuevo; para
+ * repetir el mismo texto, limpia el aviso (`setNotice(null)`) antes de volver a ponerlo.
+ */
 export function Notice({ notice }) {
+  const toast = useToast()
+  const type = notice?.type
+  const text = notice?.text
+  useEffect(() => {
+    if (text) toast.show({ type: type === 'error' ? 'error' : 'ok', text })
+  }, [type, text, toast])
+  return null
+}
+
+/** Aviso fijo en la página, para estados que deben seguir visibles (un bloqueo, un error de carga). */
+export function InlineNotice({ notice }) {
   if (!notice) return null
   return (
     <p

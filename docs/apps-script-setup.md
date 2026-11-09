@@ -13,7 +13,7 @@ El proyecto de Apps Script es **un solo archivo**, [`apps-script/Code.gs`](../ap
 | `deleteFile`            | admin                                 | manda a la papelera un archivo de cualquiera de las dos carpetas |
 | `deleteUser`            | admin                                 | elimina la cuenta de acceso (Firebase Auth) de un usuario        |
 | `notifyOrderCreated`    | dueño del pedido                      | correo a `crsuchema@gmail.com` y al cliente                      |
-| `notifyPaymentApproved` | admin                                 | correo al cliente: adelanto aprobado                             |
+| `notifyPaymentApproved` | admin                                 | correo al cliente: adelanto aprobado (con el recibo adjunto, PNG) |
 | `notifySupplierUpdate`  | admin                                 | correo a cada cliente con camisas en ese pedido al proveedor     |
 
 En cada petición el script verifica el ID token de Firebase (API REST de Identity Toolkit). Para las acciones de admin comprueba que el correo sea el del admin fijo (`crsuchema@gmail.com`, verificado) o que exista `admins/{uid}` en Firestore, leyéndolo con el token del propio usuario; no se usan credenciales de servicio. El resultado de ambas verificaciones se guarda 2 minutos en caché para ahorrar llamadas.

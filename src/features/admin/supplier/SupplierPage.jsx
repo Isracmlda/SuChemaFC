@@ -3,13 +3,20 @@ import {
   MdCheckBox,
   MdCheckBoxOutlineBlank,
   MdDeleteForever,
+  MdCalculate,
   MdDownload,
+  MdExpandLess,
+  MdExpandMore,
+  MdQrCode2,
   MdSave,
   MdWhatsapp,
 } from 'react-icons/md'
+import Collapsible from '../../../components/Collapsible.jsx'
 import Field from '../../../components/Field.jsx'
+import FilterPanel from '../../../components/FilterPanel.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
+import { useDialog } from '../../../hooks/useDialog.js'
 import { listCollection } from '../../../services/db.js'
 import { listOrders } from '../../../services/adminOrders.js'
 import { notifySupplierUpdate } from '../../../services/notifications.js'
@@ -19,10 +26,24 @@ import {
   listSupplierOrders,
   updateSupplierOrder,
 } from '../../../services/supplierOrders.js'
-import { formatDateTime, fromInputValue, toInputValue } from '../../../utils/dates.js'
+import {
+  formatDateTime,
+  fromDayValue,
+  fromInputValue,
+  toDayValue,
+  toInputValue,
+} from '../../../utils/dates.js'
 import { errorMessage } from '../../../utils/errors.js'
 import { formatCRC, toInt } from '../../../utils/format.js'
-import { btnDanger, btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
+import {
+  actionRowClass,
+  actionStackClass,
+  btnDanger,
+  btnPrimary,
+  btnSecondary,
+  cardClass,
+  inputClass,
+} from '../../../utils/ui.js'
 import { describeCustom } from '../../personalization/personalization.js'
 import {
   DEFAULT_MESSAGE,
@@ -37,8 +58,10 @@ import {
   groupLines,
   pendingLines,
   supplierLabel,
+  supplierSummary,
   validateSupplierForm,
 } from './supplier.js'
+import LabelsModal from './LabelsModal.jsx'
 
 async function loadAll() {
   const [orders, supplierOrders, privates] = await Promise.all([
@@ -68,6 +91,48 @@ const extras = (l) =>
     .filter(Boolean)
     .join(', ')
 
+/**
+ * Cálculos de costos y ganancia en fichas compactas. Empieza oculto: el botón los muestra y los
+ * oculta. `rows` son [título, valor, detalle opcional]; la última ficha (ganancia) se resalta.
+ */
+function CostBreakdown({ rows, lead = null }) {
+  const [open, setOpen] = useState(false)
+  const Icon = open ? MdExpandLess : MdExpandMore
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-end gap-3">
+        {lead}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className={btnSecondary}
+        >
+          <MdCalculate className="size-5" aria-hidden="true" />
+          {open ? 'Ocultar cálculos' : 'Ver cálculos'}
+          <Icon className="size-5" aria-hidden="true" />
+        </button>
+      </div>
+      <Collapsible open={open}>
+        <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
+          {rows.map(([title, value, detail], i) => (
+            <div
+              key={title}
+              className={`rounded-md border px-3 py-2 ${
+                i === rows.length - 1 ? 'border-accent bg-surface-2' : 'border-border bg-bg'
+              }`}
+            >
+              <dt className="text-muted">{title}</dt>
+              <dd className="font-bold">{value}</dd>
+              {detail && <dd className="text-xs text-muted">{detail}</dd>}
+            </div>
+          ))}
+        </dl>
+      </Collapsible>
+    </div>
+  )
+}
+
 function NewSupplierOrder({ data, onDone }) {
   const pending = useMemo(
     () => pendingLines(data.orders, data.supplierOrders),
@@ -79,7 +144,9 @@ function NewSupplierOrder({ data, onDone }) {
   const [costs, setCosts] = useState({})
   const [supplier, setSupplier] = useState('')
   const [notes, setNotes] = useState('')
-  const [estimate, setEstimate] = useState(toInputValue(defaultEstimate()))
+  const [importCost, setImportCost] = useState(0)
+  const [showDetails, setShowDetails] = useState(false)
+  const [estimate, setEstimate] = useState(toInputValue(defaultEstimate()).slice(0, 10))
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -91,7 +158,17 @@ function NewSupplierOrder({ data, onDone }) {
       ...l,
       unitCost: costs[l.key] ?? defaultUnitCost(l, data.costs, data.variantCosts),
     }))
-  const form = { supplier, notes, estimatedDate: fromInputValue(estimate), lines: chosen }
+  const form = {
+    supplier,
+    notes,
+    // Solo fecha: se toma el mediodía local para que ninguna zona horaria la corra de día.
+    estimatedDate: fromInputValue(estimate ? `${estimate}T12:00` : ''),
+    lines: chosen,
+    importCost,
+  }
+  const productCost = chosen.reduce((n, l) => n + l.qty * l.unitCost, 0)
+  const units = chosen.reduce((n, l) => n + l.qty, 0)
+  const revenue = chosen.reduce((n, l) => n + l.qty * (l.unitPrice ?? 0), 0)
   const problem = validateSupplierForm(form)
 
   const toggle = (key) =>
@@ -133,15 +210,24 @@ function NewSupplierOrder({ data, onDone }) {
             </ul>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Buscar" hint="Camisa, cliente o referencia.">
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className={inputClass}
-              />
-            </Field>
+          <FilterPanel
+            gridClass="sm:grid-cols-2"
+            active={Boolean(query) || Boolean(size)}
+            onClear={() => {
+              setQuery('')
+              setSize('')
+            }}
+            search={
+              <Field label="Buscar" hint="Camisa, cliente o referencia.">
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            }
+          >
             <Field label="Talla">
               <select value={size} onChange={(e) => setSize(e.target.value)} className={inputClass}>
                 <option value="">Todas</option>
@@ -152,9 +238,9 @@ function NewSupplierOrder({ data, onDone }) {
                 ))}
               </select>
             </Field>
-          </div>
+          </FilterPanel>
 
-          <div className="flex flex-wrap gap-2">
+          <div className={actionRowClass}>
             <button
               type="button"
               className={btnSecondary}
@@ -164,6 +250,14 @@ function NewSupplierOrder({ data, onDone }) {
             </button>
             <button type="button" className={btnSecondary} onClick={() => setSelected([])}>
               Quitar selección
+            </button>
+            <button
+              type="button"
+              aria-pressed={showDetails}
+              className={btnSecondary}
+              onClick={() => setShowDetails((v) => !v)}
+            >
+              {showDetails ? 'Ocultar detalles' : 'Mostrar detalles'}
             </button>
           </div>
 
@@ -185,10 +279,12 @@ function NewSupplierOrder({ data, onDone }) {
                       <span className="font-semibold">
                         {l.qty} × {l.name} ({l.size})
                       </span>
-                      <span className="block text-sm text-muted">
-                        {l.customerName} · {l.orderRef}
-                        {extras(l) && ` · ${extras(l)}`}
-                      </span>
+                      {showDetails && (
+                        <span className="block text-sm text-muted">
+                          {l.customerName} · {l.orderRef}
+                          {extras(l) && ` · ${extras(l)}`}
+                        </span>
+                      )}
                     </span>
                   </button>
                   {on && (
@@ -211,7 +307,7 @@ function NewSupplierOrder({ data, onDone }) {
 
           <form onSubmit={submit} className={`${cardClass} flex flex-col gap-3`}>
             <h3 className="font-bold">Crear pedido ({chosen.length} líneas elegidas)</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_9.5rem] gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
               <Field label="Proveedor">
                 <input
                   required
@@ -221,34 +317,62 @@ function NewSupplierOrder({ data, onDone }) {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Fecha estimada de llegada" hint="Unos 30 días; puedes cambiarla.">
+              <Field label="Llegada">
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={estimate}
                   onChange={(e) => setEstimate(e.target.value)}
-                  className={inputClass}
+                  className={`${inputClass} px-2`}
                 />
               </Field>
             </div>
+            <CostBreakdown
+              lead={
+                <Field label="Importación total (₡)" className="min-w-0 flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    value={importCost || ''}
+                    placeholder="0"
+                    onChange={(e) => setImportCost(toInt(e.target.value))}
+                    className={inputClass}
+                  />
+                </Field>
+              }
+              rows={[
+                ['Camisas', formatCRC(productCost)],
+                [
+                  'Importación',
+                  formatCRC(importCost),
+                  units > 0 ? `${formatCRC(importCost / units)} por camisa` : '',
+                ],
+                ['Costo total', formatCRC(productCost + importCost)],
+                ['Venta', formatCRC(revenue)],
+                ['Ganancia', formatCRC(revenue - productCost - importCost)],
+              ]}
+            />
             <Field label="Notas">
-              <textarea
-                rows={2}
+              <input
                 maxLength={1000}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className={`${inputClass} py-2`}
+                className={inputClass}
               />
             </Field>
-            <p className="text-sm">
-              Costo total:{' '}
-              <strong>{formatCRC(chosen.reduce((n, l) => n + l.qty * l.unitCost, 0))}</strong>
-            </p>
-            {chosen.length > 0 && problem && <p className="text-sm text-danger">⚠ {problem}</p>}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={busy || Boolean(problem)}
+                className={`${btnPrimary} w-full sm:w-auto`}
+              >
+                <MdSave className="size-5" aria-hidden="true" />
+                {busy ? 'Guardando…' : 'Crear pedido al proveedor'}
+              </button>
+              {chosen.length > 0 && problem && <p className="text-sm text-danger">⚠ {problem}</p>}
+            </div>
             <Notice notice={notice} />
-            <button type="submit" disabled={busy || Boolean(problem)} className={btnPrimary}>
-              <MdSave className="size-5" aria-hidden="true" />
-              {busy ? 'Guardando…' : 'Crear pedido al proveedor'}
-            </button>
           </form>
         </>
       )}
@@ -257,17 +381,23 @@ function NewSupplierOrder({ data, onDone }) {
 }
 
 function SupplierOrderCard({ so, data, onChanged }) {
+  const dialog = useDialog()
   const [status, setStatus] = useState(so.status)
-  const [estimate, setEstimate] = useState(toInputValue(so.estimatedDate))
+  const [estimate, setEstimate] = useState(toDayValue(so.estimatedDate))
   const [note, setNote] = useState('')
   const [template, setTemplate] = useState(DEFAULT_MESSAGE)
   const [showNotices, setShowNotices] = useState(false)
+  const [showLabels, setShowLabels] = useState(false)
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const orders = data.orders.filter((o) => affectedOrderIds(so).includes(o.id))
+  const summary = supplierSummary(so)
   const dirty =
-    status !== so.status || fromInputValue(estimate) !== so.estimatedDate || Boolean(note.trim())
+    status !== so.status || estimate !== toDayValue(so.estimatedDate) || Boolean(note.trim())
+  // Sin cambios en el día se conserva el valor guardado; si no, el día elegido (a las 12:00).
+  const estimateMs = () =>
+    estimate === toDayValue(so.estimatedDate) ? so.estimatedDate : fromDayValue(estimate)
 
   async function save() {
     setBusy(true)
@@ -275,7 +405,7 @@ function SupplierOrderCard({ so, data, onChanged }) {
     try {
       const { changes } = await updateSupplierOrder(
         so,
-        { status, estimatedDate: fromInputValue(estimate), note },
+        { status, estimatedDate: estimateMs(), note },
         data,
       )
       // Correo a cada cliente con camisas en este pedido (leído desde Firestore por el script).
@@ -293,13 +423,13 @@ function SupplierOrderCard({ so, data, onChanged }) {
   }
 
   async function remove() {
-    if (
-      !window.confirm(
-        `¿Eliminar el pedido a ${so.supplier}? Sus camisas vuelven a "por pedir" y los pedidos de clientes que dependían de él retroceden de estado. No se puede deshacer.`,
-      )
-    ) {
-      return
-    }
+    const yes = await dialog.confirm({
+      title: 'Eliminar pedido al proveedor',
+      message: `¿Eliminar el pedido a ${so.supplier}? Sus camisas vuelven a "por pedir" y los pedidos de clientes que dependían de él retroceden de estado. No se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!yes) return
     setBusy(true)
     setNotice(null)
     try {
@@ -317,7 +447,7 @@ function SupplierOrderCard({ so, data, onChanged }) {
   const notices = showNotices
     ? customerNotices(
         orders,
-        { ...so, status, estimatedDate: fromInputValue(estimate) },
+        { ...so, status, estimatedDate: estimateMs() },
         { template, origin: window.location.origin },
       )
     : []
@@ -340,6 +470,23 @@ function SupplierOrderCard({ so, data, onChanged }) {
         </button>
       </div>
       {so.notes && <p className="text-sm">{so.notes}</p>}
+      <CostBreakdown
+        rows={[
+          ['Camisas', formatCRC(summary.productCost)],
+          [
+            'Importación',
+            formatCRC(summary.importCost),
+            `${formatCRC(summary.importPerUnit)} por camisa`,
+          ],
+          ['Costo total', formatCRC(summary.totalCost)],
+          ...(summary.profit != null
+            ? [
+                ['Venta', formatCRC(summary.revenue)],
+                ['Ganancia', formatCRC(summary.profit)],
+              ]
+            : []),
+        ]}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Estado">
@@ -353,7 +500,7 @@ function SupplierOrderCard({ so, data, onChanged }) {
         </Field>
         <Field label="Fecha estimada">
           <input
-            type="datetime-local"
+            type="date"
             value={estimate}
             onChange={(e) => setEstimate(e.target.value)}
             className={inputClass}
@@ -369,7 +516,7 @@ function SupplierOrderCard({ so, data, onChanged }) {
         />
       </Field>
       <Notice notice={notice} />
-      <div className="flex flex-wrap gap-2">
+      <div className={actionStackClass}>
         <button type="button" onClick={save} disabled={busy || !dirty} className={btnPrimary}>
           <MdSave className="size-5" aria-hidden="true" />
           {busy ? 'Guardando…' : 'Guardar y avisar al rastreo'}
@@ -378,11 +525,24 @@ function SupplierOrderCard({ so, data, onChanged }) {
           <MdWhatsapp className="size-5" aria-hidden="true" />
           {showNotices ? 'Ocultar avisos' : 'Avisos por WhatsApp'}
         </button>
+        {so.status === 'llego' && (
+          <button type="button" onClick={() => setShowLabels(true)} className={btnSecondary}>
+            <MdQrCode2 className="size-5" aria-hidden="true" />
+            Etiquetas de entrega
+          </button>
+        )}
         <button type="button" onClick={remove} disabled={busy} className={btnDanger}>
           <MdDeleteForever className="size-5" aria-hidden="true" />
           Eliminar pedido
         </button>
       </div>
+
+      <LabelsModal
+        open={showLabels}
+        onClose={() => setShowLabels(false)}
+        supplierOrder={so}
+        orders={data.orders}
+      />
 
       {showNotices && (
         <div className="flex flex-col gap-2">

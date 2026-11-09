@@ -20,8 +20,16 @@ async function send(action, payload, options) {
 export const notifyOrderCreated = (orderId) =>
   send('notifyOrderCreated', { orderId }, { requireSession: true })
 
-/** Admin: avisa al cliente que el pago de su pedido fue aprobado. */
-export const notifyPaymentApproved = (orderId) => send('notifyPaymentApproved', { orderId })
+/**
+ * Admin: avisa al cliente que el pago de su pedido fue aprobado. `receiptImage` (PNG en base64,
+ * opcional) es el recibo, que el correo lleva adjunto.
+ */
+export const notifyPaymentApproved = (orderId, receiptImage = '', resend = false) =>
+  send('notifyPaymentApproved', {
+    orderId,
+    ...(receiptImage ? { receiptImage } : {}),
+    ...(resend ? { resend: true } : {}),
+  })
 
 /** Admin: avisa a cada cliente con camisas en ese pedido al proveedor. */
 export const notifySupplierUpdate = (supplierOrderId, note = '') =>

@@ -5,6 +5,8 @@ import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { CartProvider } from './context/CartContext.jsx'
+import { DialogProvider } from './context/DialogProvider.jsx'
+import { ToastProvider } from './context/ToastProvider.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { resolveEntry } from './utils/entry.js'
 
@@ -20,7 +22,11 @@ createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <CartProvider>
           <MemoryRouter initialEntries={[entryPath]}>
-            <App />
+            <ToastProvider>
+              <DialogProvider>
+                <App />
+              </DialogProvider>
+            </ToastProvider>
           </MemoryRouter>
         </CartProvider>
       </AuthProvider>
