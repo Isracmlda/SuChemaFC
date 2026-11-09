@@ -1,0 +1,12 @@
+dist
+.firebase
+node_modules
+package-lock.json
+docs/plan.md
+suchema-plan.md
+.agents
+skills-lock.json
+firebase.json
+firestore.indexes.json
+firestore.rules
+apps-script/Code.gs

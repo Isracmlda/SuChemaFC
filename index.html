@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="SuChemaFC: tu equipo, tus colores, tu pasión. Camisetas de fútbol."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SuChemaFC" />
+    <meta property="og:title" content="SuChemaFC" />
+    <meta property="og:description" content="Tu equipo, tus colores, tu pasión." />
+    <meta property="og:image" content="/og-default.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>SuChemaFC</title>
+    <script>
+      // Aplica el tema guardado antes de pintar (oscuro por defecto) para evitar parpadeos.
+      try {
+        var t = localStorage.getItem('theme')
+        document.documentElement.classList.toggle('dark', t !== 'light')
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

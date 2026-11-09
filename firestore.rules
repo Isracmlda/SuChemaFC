@@ -1,0 +1,367 @@
+rules_version = '2';
+
+/*
+ * Reglas de seguridad de SuChemaFC. Esquema documentado en docs/data-model.md.
+ *
+ * Supuestos:
+ * - Admin = sesión de Google (no anónima) + documento admins/{uid}. El primer admin se crea a mano
+ *   en la consola de Firestore.
+ * - Los invitados usan sesión anónima de Firebase Auth (request.auth != null).
+ * - No hay Cloud Functions (plan Spark): estas reglas validan forma, rangos y aritmética, pero NO
+ *   pueden recalcular precios contra el catálogo. El admin revisa cada pedido antes de confirmar
+ *   el adelanto (ver "Limitaciones" en docs/data-model.md).
+ * - Las consultas de listado del cliente deben incluir los mismos filtros que exigen las reglas
+ *   (products: visible == true y deleted == false; reviews: approved == true).
+ *
+ * Son un prototipo sólido, no una garantía: revisarlas y probarlas antes de abrir al público.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers de identidad ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isGoogle() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Admin fijo: siempre es admin por su correo verificado de Google, sin depender de admins/{uid}.
+    // No se puede quitar ni eliminar desde la app (ver admins y users más abajo).
+    function isSuperAdmin() {
+      return isGoogle()
+        && request.auth.token.email == 'crsuchema@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSuperAdmin()
+        || (isGoogle() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // ---------- Helpers de validación ----------
+
+    function isStr(v, maxLen) {
+      return v is string && v.size() <= maxLen;
+    }
+
+    function isNonEmptyStr(v, maxLen) {
+      return v is string && v.size() > 0 && v.size() <= maxLen;
+    }
+
+    function isMoney(v) {
+      return v is int && v >= 0 && v <= 100000000;
+    }
+
+    function orderStatus(s) {
+      return s in [
+        'pago_pendiente_revision', 'adelanto_confirmado', 'pedido_al_proveedor',
+        'en_camino', 'listo_para_entrega', 'entregado', 'cancelado', 'pago_rechazado'
+      ];
+    }
+
+    // ---------- Colecciones de lectura pública, escritura de admin ----------
+
+    match /sections/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /tags/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /patchGroups/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /competitions/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /sizeCharts/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /paymentMethods/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------- Admins ----------
+
+    match /admins/{uid} {
+      // Cada usuario solo puede saber si él mismo es admin; los admins listan a todos.
+      allow read: if isOwner(uid) || isAdmin();
+      // Un admin da el rol a otros (el contenido es solo informativo). Nadie se lo quita al
+      // admin fijo: su rol viene del correo, no de este documento.
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'grantedBy']);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Usuarios (contienen correo: solo dueño y admin) ----------
+
+    function validUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['displayName', 'email', 'photoURL', 'lastLoginAt', 'cart', 'wishlist'])
+        && d.keys().hasAll(['displayName', 'email', 'photoURL', 'lastLoginAt'])
+        && isStr(d.displayName, 100)
+        && isStr(d.email, 200)
+        && d.email == request.auth.token.email
+        && isStr(d.photoURL, 500)
+        && d.lastLoginAt is timestamp
+        && (!('cart' in d) || (d.cart is list && d.cart.size() <= 50))
+        && (!('wishlist' in d) || (d.wishlist is list && d.wishlist.size() <= 200));
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isGoogle() && isOwner(uid) && validUser();
+      // Un admin elimina perfiles ajenos, pero nunca el suyo ni el del admin fijo.
+      allow delete: if isAdmin()
+        && !isOwner(uid)
+        && resource.data.email != 'crsuchema@gmail.com';
+    }
+
+    // ---------- Productos ----------
+
+    match /products/{id} {
+      allow read: if isAdmin()
+        || (resource.data.visible == true && resource.data.deleted == false);
+      allow write: if isAdmin();
+    }
+
+    match /productPrivate/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- Cupones ----------
+
+    // Registro del uso de un cupón: solo se permite sumar 1 a usedCount, en el mismo lote en que
+    // se crea un pedido propio que lleva ese cupón.
+    function validCouponUse(code) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let orderPath = /databases/$(database)/documents/orders/$(after.lastOrderId);
+      return after.diff(before).affectedKeys().hasOnly(['usedCount', 'lastOrderId'])
+        && before.active == true
+        && after.lastOrderId is string
+        && after.usedCount == before.usedCount + 1
+        && (before.maxUses == 0 || after.usedCount <= before.maxUses)
+        && request.time >= before.startsAt
+        && request.time <= before.endsAt
+        && !exists(orderPath)
+        && getAfter(orderPath).data.uid == request.auth.uid
+        && getAfter(orderPath).data.couponCode == code;
+    }
+
+    match /coupons/{code} {
+      // get por código con cualquier sesión; sin listado para clientes.
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (signedIn() && validCouponUse(code));
+    }
+
+    // ---------- Pedidos ----------
+
+    function validCustomer(c) {
+      return c is map
+        && c.keys().hasOnly(['name', 'phone', 'email', 'address'])
+        && c.keys().hasAll(['name', 'phone'])
+        && isNonEmptyStr(c.name, 100)
+        && isNonEmptyStr(c.phone, 30)
+        && (!('email' in c) || isStr(c.email, 200))
+        && (!('address' in c) || (
+          c.address is map
+          && c.address.keys().hasOnly(['province', 'canton', 'district', 'details'])
+          && isStr(c.address.get('province', ''), 100)
+          && isStr(c.address.get('canton', ''), 100)
+          && isStr(c.address.get('district', ''), 100)
+          && isStr(c.address.get('details', ''), 300)
+        ));
+    }
+
+    // El adelanto debe ser al menos el porcentaje configurado en settings/payment (y no más que el total).
+    function validAdvance(d) {
+      let pct = get(/databases/$(database)/documents/settings/payment).data.advancePercent;
+      return d.advanceRequired is int
+        && d.advanceRequired <= d.total
+        && d.advanceRequired >= math.ceil(d.total * pct / 100.0);
+    }
+
+    // Un descuento solo es válido con cupón, y el cupón debe registrarse en el mismo lote.
+    function validCouponLink(d, orderId) {
+      return !('couponCode' in d)
+        ? d.discount == 0
+        : (isNonEmptyStr(d.couponCode, 40)
+          && getAfter(/databases/$(database)/documents/coupons/$(d.couponCode)).data.lastOrderId == orderId);
+    }
+
+    function validOrderCreate(orderId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+          'uid', 'trackingCode', 'customer', 'customerNote', 'shippingMethod', 'lines',
+          'subtotal', 'discount', 'shipping', 'total', 'couponCode', 'advanceRequired',
+          'receiptFileId', 'status', 'paidAmount', 'payments', 'deleted', 'createdAt'
+        ])
+        && d.keys().hasAll([
+          'uid', 'trackingCode', 'customer', 'shippingMethod', 'lines', 'subtotal', 'discount',
+          'shipping', 'total', 'advanceRequired', 'status', 'paidAmount', 'payments', 'deleted',
+          'createdAt'
+        ])
+        && d.uid == request.auth.uid
+        && d.trackingCode is string && d.trackingCode.size() >= 20 && d.trackingCode.size() <= 64
+        && validCustomer(d.customer)
+        && (!('customerNote' in d) || isStr(d.customerNote, 500))
+        && d.shippingMethod in ['correos', 'whatsapp']
+        && d.lines is list && d.lines.size() >= 1 && d.lines.size() <= 30
+        && isMoney(d.subtotal) && d.subtotal > 0
+        && isMoney(d.discount) && d.discount <= d.subtotal
+        && isMoney(d.shipping)
+        && isMoney(d.total) && d.total == d.subtotal - d.discount + d.shipping
+        && validAdvance(d)
+        && (!('receiptFileId' in d) || isNonEmptyStr(d.receiptFileId, 100))
+        && d.status == 'pago_pendiente_revision'
+        && d.paidAmount == 0
+        && d.payments == []
+        && d.deleted == false
+        && d.createdAt == request.time
+        && validCouponLink(d, orderId)
+        // El rastreo público se crea en el mismo lote y apunta a este pedido.
+        && getAfter(/databases/$(database)/documents/orderTracking/$(d.trackingCode)).data.orderId == orderId;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isOwner(resource.data.uid) || isAdmin();
+      allow create: if signedIn() && validOrderCreate(orderId);
+      // Solo el admin cambia estados y pagos; el dueño, el rastreo y la fecha no se pueden alterar.
+      allow update: if isAdmin()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.trackingCode == resource.data.trackingCode
+        && request.resource.data.createdAt == resource.data.createdAt
+        && orderStatus(request.resource.data.status);
+      // Solo el admin elimina un pedido (junto con su rastreo, en el mismo lote).
+      allow delete: if isAdmin();
+    }
+
+    // Notas internas del admin, separadas porque el cliente lee su propio pedido.
+    match /orderPrivate/{orderId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- Rastreo público ----------
+
+    function validTrackingCreate(code) {
+      let d = request.resource.data;
+      let orderPath = /databases/$(database)/documents/orders/$(d.orderId);
+      return d.keys().hasOnly(['orderId', 'status', 'timeline', 'summary', 'estimatedDate', 'createdAt', 'updatedAt'])
+        && d.keys().hasAll(['orderId', 'status', 'timeline', 'summary', 'estimatedDate', 'createdAt', 'updatedAt'])
+        && code.size() >= 20 && code.size() <= 64
+        && d.orderId is string
+        && d.status == 'pago_pendiente_revision'
+        && d.timeline is list && d.timeline.size() == 1
+        && d.summary is list && d.summary.size() >= 1 && d.summary.size() <= 30
+        && d.estimatedDate == null
+        && d.createdAt == request.time
+        && d.updatedAt == request.time
+        // Solo el dueño del pedido que se crea en el mismo lote puede crear su rastreo.
+        && !exists(orderPath)
+        && getAfter(orderPath).data.uid == request.auth.uid
+        && getAfter(orderPath).data.trackingCode == code;
+    }
+
+    match /orderTracking/{code} {
+      // get público por código largo e impredecible. Sin listado.
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if signedIn() && validTrackingCreate(code);
+      allow update: if isAdmin()
+        && request.resource.data.orderId == resource.data.orderId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && orderStatus(request.resource.data.status);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Pedidos a proveedor, comprobantes y bitácora (solo admin) ----------
+
+    match /supplierOrders/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /paymentRefs/{numero} {
+      // Un comprobante solo se registra una vez: crear sobre uno existente falla (no hay update).
+      allow read, create, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    match /auditLog/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // ---------- Reseñas ----------
+
+    // Las reglas no recorren listas: se revisa cada posición posible (máximo 4 fotos).
+    function validPhotoAt(p, i) {
+      return p.size() <= i || (p[i] is string && p[i].size() > 0 && p[i].size() <= 100);
+    }
+
+    function validPhotos(p) {
+      return p is list && p.size() <= 4
+        && validPhotoAt(p, 0) && validPhotoAt(p, 1) && validPhotoAt(p, 2) && validPhotoAt(p, 3);
+    }
+
+    function validReviewCreate(reviewId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['productId', 'uid', 'authorName', 'rating', 'text', 'photos', 'approved', 'createdAt'])
+        && d.keys().hasAll(['productId', 'uid', 'authorName', 'rating', 'text', 'photos', 'approved', 'createdAt'])
+        && d.productId is string
+        && reviewId == d.productId + '_' + request.auth.uid
+        && d.uid == request.auth.uid
+        && d.authorName == request.auth.token.name
+        && d.rating is int && d.rating >= 1 && d.rating <= 5
+        && isStr(d.text, 1000)
+        && validPhotos(d.photos)
+        && d.approved == false
+        && d.createdAt == request.time
+        && exists(/databases/$(database)/documents/products/$(d.productId));
+    }
+
+    match /reviews/{reviewId} {
+      // get: el dueño puede consultar su reseña aunque aún no exista (el ID lleva su uid).
+      allow get: if resource == null
+        ? (isGoogle() && reviewId.matches('.+_' + request.auth.uid))
+        : (resource.data.approved == true
+          || isOwner(resource.data.uid)
+          || isAdmin());
+      allow list: if resource.data.approved == true
+        || isOwner(resource.data.uid)
+        || isAdmin();
+      allow create: if isGoogle() && validReviewCreate(reviewId);
+      // Moderación: el admin solo puede cambiar "approved".
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved']);
+      allow delete: if isOwner(resource.data.uid) || isAdmin();
+    }
+  }
+}
