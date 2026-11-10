@@ -17,6 +17,7 @@ import FilterPanel from '../../../components/FilterPanel.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { useAsync } from '../../../hooks/useAsync.js'
 import { useDialog } from '../../../hooks/useDialog.js'
+import { DEFAULTS_DOC_ID } from '../../../services/catalog.js'
 import { listCollection } from '../../../services/db.js'
 import { listOrders } from '../../../services/adminOrders.js'
 import { notifySupplierUpdate } from '../../../services/notifications.js'
@@ -64,11 +65,12 @@ import {
 import LabelsModal from './LabelsModal.jsx'
 
 async function loadAll() {
-  const [orders, supplierOrders, privates] = await Promise.all([
+  const [orders, supplierOrders, allPrivates] = await Promise.all([
     listOrders(),
     listSupplierOrders(),
     listCollection('productPrivate'),
   ])
+  const privates = allPrivates.filter((p) => p.id !== DEFAULTS_DOC_ID)
   const costs = Object.fromEntries(privates.map((p) => [p.id, p.cost ?? 0]))
   const variantCosts = Object.fromEntries(
     privates.filter((p) => p.variantCosts).map((p) => [p.id, p.variantCosts]),

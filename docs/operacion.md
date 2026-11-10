@@ -15,7 +15,7 @@ Documento para quien administra SuChemaFC. Los pasos marcados **[Tú]** requiere
    - Número de WhatsApp de la tienda.
    - Al menos un **método de pago** (SINPE con número y nombre).
 7. **Contenido:** Admin → Contenido (preguntas frecuentes, términos, mensaje de WhatsApp).
-8. **Catálogo:** Admin → Secciones, Parches, Competiciones, Recargos y Tallas; las camisas se agregan desde Inicio. Los **hashtags** se escriben directamente en el formulario de cada camisa (se crean solos). Los recargos por talla y por personalización son estándar (Admin → Recargos) y cada camisa puede cambiarlos. Una camisa solo aparece en la tienda si está **visible** y no eliminada.
+8. **Catálogo:** Admin → Predeterminados (Secciones, Parches, Competiciones, Recargos y Tallas); las camisas se agregan desde Inicio. Los **hashtags** se escriben directamente en el formulario de cada camisa (se crean solos). Los recargos por talla y por personalización son estándar (Admin → Predeterminados › Recargos) y cada camisa puede cambiarlos. Una camisa solo aparece en la tienda si está **visible** y no eliminada.
 
 ## 2. Despliegue
 

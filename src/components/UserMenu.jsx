@@ -1,12 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  MdAccountCircle,
-  MdAdminPanelSettings,
-  MdLogin,
-  MdLogout,
-  MdReceiptLong,
-} from 'react-icons/md'
+import { MdAccountCircle, MdLogin, MdLogout, MdReceiptLong } from 'react-icons/md'
 import { useAuth } from '../hooks/useAuth.js'
 import { authErrorMessage, signInWithGoogle, signOutUser } from '../services/auth.js'
 import { navIconClass } from '../utils/ui.js'
@@ -24,7 +18,7 @@ export const menuRowClass =
  * Con `stacked` se dibuja como lista de filas con texto, para el menú desplegable del móvil.
  */
 export default function UserMenu({ stacked = false }) {
-  const { user, isGuest, showAdminUi, configured } = useAuth()
+  const { user, isGuest, configured } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -104,13 +98,6 @@ export default function UserMenu({ stacked = false }) {
           <MdReceiptLong className="size-5" aria-hidden="true" />
         </Link>
       </Tooltip>
-      {showAdminUi && (
-        <Tooltip label="Administración">
-          <Link to="/admin" aria-label="Administración" className={iconButtonClass}>
-            <MdAdminPanelSettings className="size-5" aria-hidden="true" />
-          </Link>
-        </Tooltip>
-      )}
     </div>
   )
 }

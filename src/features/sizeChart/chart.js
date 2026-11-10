@@ -95,13 +95,21 @@ const byColumns = (sizes, lines) => sizes.map((size, i) => [size, ...lines.map((
 
 const inchRange = (a, b) => `${round1(a * CM_PER_INCH)}-${round1(b * CM_PER_INCH)}`
 
+const SEED_NAME_DEFAULT = 'Camiseta hombre · Versión aficionado'
 const SIZES_5 = ['S', 'M', 'L', 'XL', 'XXL']
 const SIZES_NBA = ['S', 'M', 'L', 'XL', 'XXL']
+
+/** Guía que una camisa nueva trae marcada por defecto. */
+export const DEFAULT_CHART_NAME = SEED_NAME_DEFAULT
+
+/** La guía por defecto entre las guardadas (por su nombre), o null si no existe. */
+export const findDefaultChart = (charts = []) =>
+  charts.find((c) => String(c.name).trim() === DEFAULT_CHART_NAME) ?? null
 
 /** Guías de tallas del proveedor, traducidas al español (medidas en cm). */
 export const SEED_CHARTS = [
   guide(
-    'Camiseta hombre · Versión aficionado',
+    SEED_NAME_DEFAULT,
     ['Ancho', 'Largo', 'Estatura recomendada', 'Peso recomendado (kg)'],
     [L, L, L, P],
     [

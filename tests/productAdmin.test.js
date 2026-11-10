@@ -7,7 +7,6 @@ import {
   cleanVariantForSave,
   makeVariantId,
   normalizeSizes,
-  parseCustomSizes,
   validateChartId,
   validateSizes,
   validateVariants,
@@ -21,15 +20,6 @@ describe('productAdmin: lógica de administración de versiones y tallas', () =>
       const id2 = makeVariantId()
       expect(id1).toMatch(/^v_[a-z0-9]+_[a-z0-9]+$/)
       expect(id1).not.toBe(id2)
-    })
-  })
-
-  describe('parseCustomSizes', () => {
-    it('divide texto por comas y espacios descartando vacíos', () => {
-      expect(parseCustomSizes('16, 18, 20')).toEqual(['16', '18', '20'])
-      expect(parseCustomSizes('16   18\n20,22')).toEqual(['16', '18', '20', '22'])
-      expect(parseCustomSizes('')).toEqual([])
-      expect(parseCustomSizes(null)).toEqual([])
     })
   })
 

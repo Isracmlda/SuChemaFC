@@ -32,11 +32,7 @@ const DashboardPage = lazyPage(() => import('./features/admin/dashboard/Dashboar
 const AuditPage = lazyPage(() => import('./features/admin/audit/AuditPage.jsx'))
 const BackupPage = lazyPage(() => import('./features/admin/dashboard/BackupPage.jsx'))
 const ProductsPage = lazyPage(() => import('./features/admin/catalog/ProductsPage.jsx'))
-const SectionsPage = lazyPage(() => import('./features/admin/catalog/SectionsPage.jsx'))
-const PatchGroupsPage = lazyPage(() => import('./features/admin/catalog/PatchGroupsPage.jsx'))
-const CompetitionsPage = lazyPage(() => import('./features/admin/catalog/CompetitionsPage.jsx'))
-const SizeSurchargesPage = lazyPage(() => import('./features/admin/catalog/SizeSurchargesPage.jsx'))
-const SizeChartsPage = lazyPage(() => import('./features/admin/sizeCharts/SizeChartsPage.jsx'))
+const DefaultsPage = lazyPage(() => import('./features/admin/catalog/DefaultsPage.jsx'))
 const SalesPage = lazyPage(() => import('./features/admin/promotions/SalesPage.jsx'))
 const CouponsPage = lazyPage(() => import('./features/admin/promotions/CouponsPage.jsx'))
 const StoreSettingsPage = lazyPage(() => import('./features/admin/settings/StoreSettingsPage.jsx'))
@@ -73,12 +69,16 @@ export default function App() {
               <Route path="bitacora" element={<AuditPage />} />
               <Route path="respaldo" element={<BackupPage />} />
               <Route path="productos" element={<ProductsPage />} />
-              <Route path="secciones" element={<SectionsPage />} />
+              <Route path="predeterminados/:section?" element={<DefaultsPage />} />
+              {/* Rutas anteriores, ahora opciones del submenú Predeterminados */}
+              {['secciones', 'parches', 'competiciones', 'recargos', 'tallas'].map((path) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={<Navigate to={`/admin/predeterminados/${path}`} replace />}
+                />
+              ))}
               <Route path="hashtags" element={<Navigate to="/admin/productos" replace />} />
-              <Route path="parches" element={<PatchGroupsPage />} />
-              <Route path="competiciones" element={<CompetitionsPage />} />
-              <Route path="recargos" element={<SizeSurchargesPage />} />
-              <Route path="tallas" element={<SizeChartsPage />} />
               <Route path="ofertas" element={<SalesPage />} />
               <Route path="cupones" element={<CouponsPage />} />
               <Route path="ajustes" element={<StoreSettingsPage />} />

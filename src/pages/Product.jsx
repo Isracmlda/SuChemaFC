@@ -17,6 +17,7 @@ import {
   hasVariants,
   visibleVariants,
 } from '../features/catalog/variants.js'
+import { enabledOptions } from '../features/catalog/patches.js'
 import ReviewsSection from '../features/reviews/ReviewsSection.jsx'
 import PersonalizationEditor from '../features/personalization/PersonalizationEditor.jsx'
 import { buildProductMeta, productUrl } from '../features/seo/seo.js'
@@ -125,6 +126,30 @@ function ShareButton({ id }) {
       )}
       <span>{copied ? 'Enlace copiado' : 'Copiar enlace'}</span>
     </button>
+  )
+}
+
+/**
+ * Miniatura de la opción de un parche. Al pasar el mouse abre una vista ampliada con el nombre,
+ * encima de la miniatura. En pantallas táctiles no aplica.
+ */
+function PatchThumb({ image, name }) {
+  const [open, setOpen] = useState(false)
+  const show = (e) => e.pointerType === 'mouse' && setOpen(true)
+  return (
+    <span onPointerEnter={show} onPointerLeave={() => setOpen(false)} className="relative shrink-0">
+      <DriveImage id={image} size={96} className="size-8 rounded" />
+      {open && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-full left-0 z-30 mb-3 w-56 rounded-lg border border-border-strong bg-surface p-3 text-center text-sm font-normal text-fg shadow-lg"
+        >
+          <DriveImage id={image} size={400} className="aspect-square w-full rounded-md" />
+          <span className="mt-2 block">{name}</span>
+          <span className="absolute -bottom-1.5 left-3 size-3 rotate-45 border-b border-r border-border-strong bg-surface" />
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -276,12 +301,7 @@ function Purchase({
 
       {patchGroups.map((group) => (
         <fieldset key={group.id}>
-          <legend className="mb-2 flex items-center gap-2 font-semibold">
-            {group.image && (
-              <DriveImage id={group.image} size={96} alt="" className="size-8 rounded" />
-            )}
-            {group.name}
-          </legend>
+          <legend className="mb-2 font-semibold">{group.name}</legend>
           <div className="grid gap-2 sm:grid-cols-2">
             <label
               className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 text-sm ${patches[group.id] == null ? 'border-accent font-semibold' : 'border-border-strong'}`}
@@ -295,7 +315,7 @@ function Purchase({
               />
               Sin parche
             </label>
-            {group.options.map((o, i) => (
+            {enabledOptions(view, group).map(({ option: o, index: i }) => (
               <label
                 key={i}
                 className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 text-sm ${patches[group.id] === i ? 'border-accent font-semibold' : 'border-border-strong'}`}
@@ -307,7 +327,7 @@ function Purchase({
                   onChange={() => setPatches({ ...patches, [group.id]: i })}
                   className="size-4 accent-[var(--accent-solid)]"
                 />
-                <DriveImage id={o.image} size={96} className="size-8 shrink-0 rounded" />
+                {o.image && <PatchThumb image={o.image} name={o.name} />}
                 <span className="flex-1">{o.name}</span>
                 <span className="text-muted">+{formatCRC(o.price)}</span>
               </label>

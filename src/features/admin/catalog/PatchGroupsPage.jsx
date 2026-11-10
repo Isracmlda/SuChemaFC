@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { MdAdd, MdDelete, MdEdit } from 'react-icons/md'
-import DriveImage from '../../../components/DriveImage.jsx'
 import { EmptyState, ErrorState, Loading, Notice } from '../../../components/States.jsx'
 import { errorMessage } from '../../../utils/errors.js'
 import { useAsync } from '../../../hooks/useAsync.js'
@@ -91,14 +90,6 @@ export default function PatchGroupsPage() {
         <ul className="flex flex-col gap-2">
           {groups.map((g) => (
             <li key={g.id} className={`${cardClass} flex flex-wrap items-center gap-3`}>
-              {g.image && (
-                <DriveImage
-                  id={g.image}
-                  size={160}
-                  alt=""
-                  className="size-12 shrink-0 rounded-md"
-                />
-              )}
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{g.name}</p>
                 <p className="text-sm text-muted">

@@ -192,6 +192,40 @@ html.theme-transition *::after {
   pointer-events: none;
 }
 
+/* Cambio entre tarjetas y lista: cada camisa se desliza a su nuevo lugar */
+::view-transition-group(*) {
+  animation-duration: 350ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Cambio entre modo cliente y administración: las herramientas de admin entran con un fundido ligero */
+@keyframes admin-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes admin-leave {
+  to {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+.admin-enter {
+  animation: admin-enter 250ms ease-out both;
+}
+
+.admin-leave {
+  animation: admin-leave 200ms ease-in both;
+  pointer-events: none;
+}
+
 /* Respeta la preferencia del sistema "reducir movimiento" */
 @media (prefers-reduced-motion: reduce) {
   html.theme-transition,
@@ -202,6 +236,8 @@ html.theme-transition *::after {
   }
 
   .page-enter,
+  .admin-enter,
+  .admin-leave,
   .card-enter,
   .card-leave,
   .toast-enter {

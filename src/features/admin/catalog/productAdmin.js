@@ -8,15 +8,6 @@ export function makeVariantId() {
   return `v_${time}_${rand}`
 }
 
-/** Divide un texto con tallas separadas por coma o espacio (ej. "16, 18, 20"). */
-export function parseCustomSizes(text) {
-  if (!text) return []
-  return String(text)
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
 /**
  * Normaliza una lista de tallas: recorta espacios, elimina vacíos y descarta
  * duplicados sin distinguir mayúsculas/minúsculas, conservando el orden de aparición.

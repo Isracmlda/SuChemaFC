@@ -9,6 +9,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { MAX_ORDERS } from '../features/admin/dashboard/stats.js'
+import { DEFAULTS_DOC_ID } from './catalog.js'
 import { listCollection } from './db.js'
 import { db } from './firebase.js'
 
@@ -29,7 +30,11 @@ export async function listOrdersSince(startMs, max = MAX_ORDERS) {
 }
 
 const costsOf = (privates) =>
-  Object.fromEntries(privates.filter((p) => Number.isFinite(p.cost)).map((p) => [p.id, p.cost]))
+  Object.fromEntries(
+    privates
+      .filter((p) => p.id !== DEFAULTS_DOC_ID && Number.isFinite(p.cost))
+      .map((p) => [p.id, p.cost]),
+  )
 
 /** { productId: costo } desde `productPrivate` (solo admin). */
 export async function loadCosts() {

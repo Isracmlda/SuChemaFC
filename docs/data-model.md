@@ -97,13 +97,15 @@ Una camisa puede ofrecer versiones (Hombre / Mujer / Niño / edición especial�
 
 `cost` (number, CRC) y `margin` (number). Mismo `id` que el producto. `variantCosts` (map `{ [variantId]: costo }`, opcional) guarda el costo del proveedor de cada versión; si una versión no tiene costo propio se usa `cost`. Las reglas no validan la forma de `products` ni de `productPrivate`, así que las versiones no requirieron cambios en `firestore.rules`.
 
+El documento especial `productPrivate/_defaults` (solo `cost`) guarda el costo del proveedor por defecto que se propone al crear camisas nuevas; no corresponde a ningún producto. Su contraparte pública, el precio base por defecto, vive en `settings/sizeSurcharges.basePrice` (`settings` es de lectura pública, por eso el costo no puede ir ahí). Ambos se editan en Admin → Predeterminados › Recargos.
+
 ### `patchGroups/{id}`
 
-`name`, `image` (ID de Drive, opcional), `order`, `options`: lista de `{ name, image (ID de Drive), price (CRC) }`. Se crean desde el formulario de la camisa (modal); se editan o eliminan en Admin → Parches.
+`name`, `image` (ID de Drive, opcional), `order`, `options`: lista de `{ name, image (ID de Drive), price (CRC) }`. Se crean desde el formulario de la camisa (modal); se editan o eliminan en Admin → Predeterminados › Parches.
 
 ### `competitions/{id}`
 
-`name`, `order`. Se mantienen en Admin → Competiciones. Cada camisa elige cuáles ofrece (`competitionIds`); el cliente escoge una al personalizar y su **nombre** se guarda en `custom.competition` de la línea del pedido.
+`name`, `order`. Se mantienen en Admin → Predeterminados › Competiciones. Cada camisa elige cuáles ofrece (`competitionIds`); el cliente escoge una al personalizar y su **nombre** se guarda en `custom.competition` de la línea del pedido.
 
 ### `sizeCharts/{id}`
 
@@ -195,7 +197,7 @@ El ID obliga a una reseña por usuario y producto. `get`: el dueño puede consul
 
 ### `settings/{doc}`
 
-Documentos: `sizeSurcharges` (`values`: map talla → CRC con los recargos estándar por talla, y `personalization`: recargo estándar de nombre y número; se editan en Admin → Recargos y cada camisa puede sobrescribirlos), `general` (`whatsappNumber`, solo dígitos; plazo del proveedor), `payment` (**`advancePercent`**, obligatorio para poder crear pedidos), `shipping` (`correosEnabled`, `correosFee`, `correosText`, `whatsappEnabled`, `whatsappText`), `content` (`howToBuy`, `faq` [`{q, a}`], `shipping`, `returns`, `terms`, `whatsappMessage`, `leadDays`; texto simple con marcadores `{adelanto}`, `{plazo}` y `{tarifa}`; se edita en Admin → Contenido). Se editan desde Admin → Ajustes (`saveStoreSettings`).
+Documentos: `sizeSurcharges` (`values`: map talla → CRC con los recargos estándar por talla, y `personalization`: recargo estándar de nombre y número; se editan en Admin → Predeterminados › Recargos y cada camisa puede sobrescribirlos), `general` (`whatsappNumber`, solo dígitos; plazo del proveedor), `payment` (**`advancePercent`**, obligatorio para poder crear pedidos), `shipping` (`correosEnabled`, `correosFee`, `correosText`, `whatsappEnabled`, `whatsappText`), `content` (`howToBuy`, `faq` [`{q, a}`], `shipping`, `returns`, `terms`, `whatsappMessage`, `leadDays`; texto simple con marcadores `{adelanto}`, `{plazo}` y `{tarifa}`; se edita en Admin → Contenido). Se editan desde Admin → Ajustes (`saveStoreSettings`).
 
 ### `paymentMethods/{id}`
 

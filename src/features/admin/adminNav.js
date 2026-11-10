@@ -1,27 +1,24 @@
 import {
-  MdCategory,
   MdConfirmationNumber,
   MdCheckroom,
   MdArticle,
   MdBackup,
   MdDashboard,
-  MdEmojiEvents,
   MdHistory,
   MdLocalOffer,
-  MdPaid,
   MdReceiptLong,
   MdLocalShipping,
   MdRateReview,
   MdPeople,
   MdQrCodeScanner,
   MdSettings,
-  MdStraighten,
-  MdWorkspacePremium,
+  MdTune,
 } from 'react-icons/md'
 
 /**
  * Menú de administración agrupado por tarea. Las camisas también se agregan y administran
  * desde Inicio (botones solo para admins); aquí se accede a `/admin/productos` desde Catálogo.
+ * «Predeterminados» reúne en pestañas secciones, parches, competiciones, recargos y tallas.
  */
 export const ADMIN_GROUPS = [
   {
@@ -37,11 +34,7 @@ export const ADMIN_GROUPS = [
     title: 'Catálogo',
     items: [
       { to: '/admin/productos', label: 'Camisas', icon: MdCheckroom },
-      { to: '/admin/secciones', label: 'Secciones', icon: MdCategory },
-      { to: '/admin/parches', label: 'Parches', icon: MdWorkspacePremium },
-      { to: '/admin/competiciones', label: 'Competiciones', icon: MdEmojiEvents },
-      { to: '/admin/recargos', label: 'Recargos', icon: MdPaid },
-      { to: '/admin/tallas', label: 'Tallas', icon: MdStraighten },
+      { to: '/admin/predeterminados', label: 'Predeterminados', icon: MdTune },
       { to: '/admin/ofertas', label: 'Ofertas', icon: MdLocalOffer },
       { to: '/admin/cupones', label: 'Cupones', icon: MdConfirmationNumber },
     ],

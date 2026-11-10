@@ -24,6 +24,7 @@ export default function SectionSelector({
   onCreate,
   creating = false,
   createPanelId,
+  action = null,
 }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -59,14 +60,15 @@ export default function SectionSelector({
   return (
     <div className="flex flex-col gap-2">
       {levels.length === 0 && <p className="text-sm text-muted">Aún no hay secciones.</p>}
-      <div className="grid gap-2 sm:grid-cols-2">
+      {/* Con `action` (botón extra) los desplegables y el botón comparten fila y pasan a la siguiente si no caben. */}
+      <div className={action ? 'flex flex-wrap items-center gap-2' : 'grid gap-2 sm:grid-cols-2'}>
         {levels.map(({ i, options, selected }) => (
           <select
             key={i}
             aria-label={i === 0 ? 'Sección principal' : `Subsección de nivel ${i + 1}`}
             value={selected}
             onChange={(e) => onChange(e.target.value || (i === 0 ? '' : path[i - 1].id))}
-            className={inputClass}
+            className={action ? `${inputClass} min-w-0 flex-1 basis-48` : inputClass}
           >
             <option value="">{i === 0 ? rootLabel : 'Elegir subsección (opcional)…'}</option>
             {options.map((s) => (
@@ -77,6 +79,7 @@ export default function SectionSelector({
             ))}
           </select>
         ))}
+        {action}
       </div>
 
       {onCreate && (

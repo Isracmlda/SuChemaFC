@@ -13,6 +13,7 @@ import {
   cleanVariantForSave,
   normalizeSizes,
 } from '../features/admin/catalog/productAdmin.js'
+import { cleanDisabledPatches, usedPatchGroupIds } from '../features/catalog/patches.js'
 import { kindsOf } from '../features/sizeChart/chart.js'
 import { SIZES } from '../utils/constants.js'
 import { slugify, normalizeText } from '../utils/format.js'
@@ -124,6 +125,29 @@ export function swapSectionOrder(a, b) {
     },
   )
 }
+/**
+ * Guarda un nuevo orden de secciones hermanas (`ordered`, ya en su orden final) en UN lote con
+ * bitácora. Solo se escriben las que cambian de posición; el `order` queda 0, 1, 2…
+ */
+export async function reorderSections(ordered, movedName = '') {
+  const changes = ordered
+    .map((s, order) => ({ s, order }))
+    .filter(({ s, order }) => s.order !== order)
+  if (changes.length === 0) return
+  await commitWithAudit(
+    changes.map(({ s, order }) => ({
+      type: 'update',
+      ref: docRef('sections', s.id),
+      data: { order },
+    })),
+    {
+      action: 'reordenar',
+      collection: 'sections',
+      docId: ordered[0].id,
+      summary: cut(`Nuevo orden de secciones${movedName ? `: se movió "${movedName}"` : ''}`),
+    },
+  )
+}
 
 export function setSectionVisible(section, visible) {
   return commitWithAudit(
@@ -166,7 +190,7 @@ export async function createTags(tags) {
     tags.map((t) => ({
       type: 'set',
       ref: docRef('tags', t.id),
-      data: { name: t.name.trim(), aliases: [] },
+      data: { name: t.name.trim(), aliases: [], createdAt: serverTimestamp() },
     })),
     {
       action: 'crear',
@@ -184,7 +208,6 @@ export async function savePatchGroup(group, count = 0) {
   const ref = isNew ? newDocRef('patchGroups') : docRef('patchGroups', group.id)
   const data = {
     name: group.name.trim(),
-    image: group.image || '',
     order: isNew ? count : group.order,
     options: group.options.map((o) => ({
       name: o.name.trim(),
@@ -216,20 +239,28 @@ export async function deletePatchGroup(group) {
 
 // ---------- Recargos estándar ----------
 
+/** Documento privado (solo admin) con el costo del proveedor que se propone al crear una camisa. */
+export const DEFAULTS_DOC_ID = '_defaults'
+
 /**
  * Guarda los recargos estándar (settings/sizeSurcharges): por talla (solo las que tienen recargo)
- * y por personalización con nombre y número.
+ * y por personalización con nombre y número. También guarda los valores que se proponen al crear una
+ * camisa: el precio base (público, junto a los recargos) y el costo del proveedor (privado, en
+ * `productPrivate/_defaults`, porque `settings` lo puede leer cualquiera).
  */
-export function saveSurcharges({ sizes, personalization }) {
+export function saveSurcharges({ sizes, personalization, basePrice = 0, supplierCost = 0 }) {
   const values = Object.fromEntries(SIZES.filter((s) => sizes[s] > 0).map((s) => [s, sizes[s]]))
   const custom = personalization > 0 ? personalization : 0
+  const price = basePrice > 0 ? basePrice : 0
+  const cost = supplierCost > 0 ? supplierCost : 0
   return commitWithAudit(
     [
       {
         type: 'set',
         ref: docRef('settings', 'sizeSurcharges'),
-        data: { values, personalization: custom },
+        data: { values, personalization: custom, basePrice: price },
       },
+      { type: 'set', ref: docRef('productPrivate', DEFAULTS_DOC_ID), data: { cost } },
     ],
     {
       action: 'editar',
@@ -240,7 +271,7 @@ export function saveSurcharges({ sizes, personalization }) {
           Object.entries(values)
             .map(([s, v]) => `${s} ${v}`)
             .join(', ') || 'sin recargo por talla'
-        }; personalización ${custom}`,
+        }; personalización ${custom}; precio base ${price}; costo proveedor ${cost}`,
       ),
     },
   )
@@ -359,6 +390,7 @@ export async function saveProduct(product, cost, variantCosts = {}) {
     tagIds: product.tagIds,
     images: product.images,
     patchGroupIds: product.patchGroupIds,
+    disabledPatches: cleanDisabledPatches(product.disabledPatches, usedPatchGroupIds(product)),
     competitionIds: product.competitionIds ?? [],
     sizeSurcharges: product.sizeSurcharges ?? {},
     // Sin `surcharge` = usa el estándar de la tienda (Firestore no admite `undefined`).

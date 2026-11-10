@@ -40,7 +40,11 @@ export default function SizeSurchargesEditor({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Celular: 3 tallas por fila. Compu: una columna por talla (hasta 8; si hay más, bajan). */}
+      <div
+        style={{ '--cols': Math.min(sizes.length, 8) }}
+        className="grid grid-cols-3 gap-3 sm:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+      >
         {sizes.map((size) => (
           <Field
             key={size}

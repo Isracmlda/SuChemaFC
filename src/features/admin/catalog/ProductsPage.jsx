@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { MdAdd, MdDelete, MdEdit, MdRestore, MdVisibility, MdVisibilityOff } from 'react-icons/md'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import DriveImage from '../../../components/DriveImage.jsx'
 import Field from '../../../components/Field.jsx'
 import FilterPanel from '../../../components/FilterPanel.jsx'
@@ -10,9 +10,11 @@ import { useAsync } from '../../../hooks/useAsync.js'
 import { useDialog } from '../../../hooks/useDialog.js'
 import { bulkUpdateProducts } from '../../../services/catalog.js'
 import { listCollection } from '../../../services/db.js'
+import { clearCatalogCache } from '../../../services/storefront.js'
 import { formatCRC, normalizeText } from '../../../utils/format.js'
 import { btnIcon, btnPrimary, btnSecondary, cardClass, inputClass } from '../../../utils/ui.js'
 import { descendantIds } from '../../catalog/search.js'
+import { clearDraft, listDrafts } from './draft.js'
 import ProductForm from './ProductForm.jsx'
 import SectionSelector from './SectionSelector.jsx'
 
@@ -38,14 +40,22 @@ export default function ProductsPage() {
   const dialog = useDialog()
   const { data, loading, error, reload } = useAsync(loadProducts)
   const [params] = useSearchParams()
-  // undefined = lista; null = nueva; string = id. `?nueva=1` (botón de Inicio) abre el formulario.
-  const [editing, setEditing] = useState(() => (params.get('nueva') ? null : undefined))
+  const navigate = useNavigate()
+  // `?volver=/ruta` (desde el catálogo) indica a dónde regresar al guardar o cancelar. Solo rutas internas.
+  const rawBack = params.get('volver')
+  const backTo = rawBack?.startsWith('/') && !rawBack.startsWith('//') ? rawBack : null
+  // undefined = lista; null = nueva; string = id. `?nueva=1` abre el formulario vacío y
+  // `?editar=ID` (lápiz de la tarjeta en el catálogo) abre esa camisa.
+  const [editing, setEditing] = useState(() =>
+    params.get('editar') ? params.get('editar') : params.get('nueva') ? null : undefined,
+  )
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('activas')
   const [sectionId, setSectionId] = useState('')
   const [selected, setSelected] = useState([])
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [, setDraftsKey] = useState(0)
 
   const filtered = useMemo(() => {
     if (!data) return []
@@ -69,6 +79,11 @@ export default function ProductsPage() {
       <ProductForm
         productId={editing}
         onDone={() => {
+          if (backTo) {
+            clearCatalogCache() // el catálogo guarda copia unos minutos: se refresca para ver el cambio
+            navigate(backTo)
+            return
+          }
           setEditing(undefined)
           setNotice(null)
           reload()
@@ -79,6 +94,8 @@ export default function ProductsPage() {
   if (loading) return <Loading />
   if (error) return <ErrorState error={error} onRetry={reload} />
 
+  // Se vuelve a leer cada vez que se regresa a la lista o se descarta un borrador.
+  const drafts = listDrafts()
   const chosen = filtered.filter((p) => selected.includes(p.id))
   const allSelected = filtered.length > 0 && chosen.length === filtered.length
   const toggleOne = (id) =>
@@ -118,6 +135,43 @@ export default function ProductsPage() {
         <MdAdd className="size-5" aria-hidden="true" />
         Nueva camisa
       </button>
+
+      {drafts.length > 0 && (
+        <section aria-label="Borradores sin guardar" className={`${cardClass} flex flex-col gap-2`}>
+          <h2 className="font-semibold">Borradores sin guardar</h2>
+          <ul className="flex flex-col gap-2">
+            {drafts.map((d) => (
+              <li key={d.productId ?? 'new'} className="flex flex-wrap items-center gap-3">
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {d.name || 'Camisa sin nombre'}
+                  <span className="text-muted">
+                    {d.productId ? ' · edición' : ' · nueva'}
+                    {d.savedAt ? ` · ${new Date(d.savedAt).toLocaleString('es-CR')}` : ''}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEditing(d.productId)}
+                  className={btnSecondary}
+                >
+                  Continuar
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Descartar borrador ${d.name || 'sin nombre'}`}
+                  onClick={() => {
+                    clearDraft(d.productId)
+                    setDraftsKey((k) => k + 1)
+                  }}
+                  className={btnIcon}
+                >
+                  <MdDelete className="size-5" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <FilterPanel
         active={Boolean(search) || status !== 'activas' || Boolean(sectionId)}

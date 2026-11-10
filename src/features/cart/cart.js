@@ -1,3 +1,4 @@
+import { isOptionDisabled } from '../catalog/patches.js'
 import { resolveVariant } from '../catalog/variants.js'
 import { isValidSize, unitPrice } from '../pricing/price.js'
 
@@ -153,6 +154,14 @@ export function priceCart(lines, catalog, now = Date.now()) {
     const groups = (view.patchGroupIds ?? [])
       .map((id) => catalog.patchGroups.find((g) => g.id === id))
       .filter(Boolean)
+    // Un parche que la camisa ya no ofrece deja la línea no disponible.
+    const offeredPatches = groups.every((g) => {
+      const option = g.options[line.patches[g.id]]
+      return !option || !isOptionDisabled(view, g.id, option)
+    })
+    if (!offeredPatches) {
+      return { line, product, status: 'unavailable', unit: 0, total: 0, variantName: null }
+    }
     const unit = unitPrice(
       view,
       groups,

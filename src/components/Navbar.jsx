@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import {
+  MdAdminPanelSettings,
   MdClose,
   MdDarkMode,
   MdFavoriteBorder,
@@ -8,6 +9,8 @@ import {
   MdLightMode,
   MdMenu,
 } from 'react-icons/md'
+import { useAuth } from '../hooks/useAuth.js'
+import { usePresence } from '../hooks/usePresence.js'
 import { useTheme } from '../hooks/useTheme.js'
 import { NAV_LINKS } from '../utils/navLinks.js'
 import { navIconActiveClass, navIconClass } from '../utils/ui.js'
@@ -94,6 +97,8 @@ function MobileMenu({ open, onClose }) {
  */
 export default function Navbar() {
   const [open, setOpen] = useState(false)
+  const { showAdminUi } = useAuth()
+  const adminLink = usePresence(showAdminUi)
   const close = () => setOpen(false)
 
   return (
@@ -122,6 +127,19 @@ export default function Navbar() {
               {to === '/carrito' && <CartBadge />}
             </NavLink>
           ))}
+          {/* Solo escritorio: en el móvil "Admin" está en la barra inferior. */}
+          {adminLink.mounted && (
+            <NavLink
+              to="/admin"
+              inert={adminLink.leaving}
+              className={(s) =>
+                `${adminLink.leaving ? 'admin-leave' : 'admin-enter'} ${linkClass(s)}`
+              }
+            >
+              <MdAdminPanelSettings className="size-5" aria-hidden="true" />
+              Administración
+            </NavLink>
+          )}
         </nav>
 
         {/* Escritorio: íconos sin borde y compactos; un divisor separa la cuenta. */}
